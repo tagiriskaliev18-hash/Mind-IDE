@@ -58,6 +58,16 @@ class Parser(unittest.TestCase):
             self.assertEqual(acts, [("write", {"path": "a/b.txt"}), ("open", {"target": "x"})])
             self.assertNotIn("секрет", text)
 
+    def test_bodyless_tag_without_slash(self):
+        p = ma.ActionStream()
+        ev = p.feed('<mkdir path="notes">\n<run cwd="notes">git init</run>') + p.flush()
+        self.assertEqual([(e[1], e[2]) for e in ev if e[0] == "action"],
+                         [("mkdir", {"path": "notes"}), ("run", {"cwd": "notes"})])
+
+    def test_powershell51_and_and(self):
+        self.assertEqual(ma.ps51_compat('cd a && echo "x && y" || echo z'),
+                         'cd a ; if (-not $?) { exit 1 }; echo "x && y" ; if ($?) { exit 0 }; echo z')
+
     def test_unclosed_write_still_saved(self):
         p = ma.ActionStream()
         ev = p.feed('<write path="x.html"><p>hi</p>') + p.flush()

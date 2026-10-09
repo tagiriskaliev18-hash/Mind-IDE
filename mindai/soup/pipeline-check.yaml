@@ -1,0 +1,25 @@
+# Проверка конвейера на крошечной модели (Qwen3.5-0.8B): данные → Soup → слияние → GGUF → Ollama за минуты.
+# Не для качества — чтобы убедиться, что вся цепочка работает на этом компьютере перед долгим обучением 9B.
+#   soup train -c pipeline-check.yaml
+
+base: Qwen/Qwen3.5-0.8B
+task: sft
+
+data:
+  train: ../data/sft.jsonl
+  format: chatml
+  max_length: 2048
+
+training:
+  epochs: 1
+  lr: 1e-4
+  batch_size: 1
+  logging_steps: 1
+  gradient_checkpointing: true
+  lora:
+    r: 8
+    alpha: 16
+    target_modules: auto
+  quantization: 4bit
+
+output: ./output/pipeline-check

@@ -78,7 +78,7 @@ def system_prompt(workspace: Path) -> str:
 
 Действия (пиши их прямо в ответе, каждое выполняется сразу):
 <write path="папка/файл">полное содержимое файла</write> — создать или перезаписать файл (папки создаются сами)
-<run>команда</run> — выполнить команду {shell} в рабочей папке; не запускай серверы, которые не завершаются
+<run>команда</run> — выполнить команду {shell} в рабочей папке; <run cwd="папка">команда</run> — в подпапке. Каждый <run> — отдельный процесс (cd не сохраняется). Не запускай серверы, которые не завершаются
 <read path="файл"/> — прочитать файл
 <list path="папка"/> — посмотреть содержимое папки
 <mkdir path="папка"/> — создать папку
@@ -170,7 +170,11 @@ class ActionStream:
             m = _OPEN.match(self.buf)
             if m:
                 tag, attrs, closed = m.group(1).lower(), parse_attrs(m.group(2)), bool(m.group(3))
+                # <mkdir path="x"> без «/» — маленькие модели так пишут часто; у таких тегов нет тела
+                closed = closed or (tag not in ("write", "run") + HIDDEN and bool(attrs))
                 self.buf = self.buf[m.end():]
+                if closed:
+                    self.buf = re.sub(r"^\s*</%s\s*>" % tag, "", self.buf, flags=re.I)
                 if closed:
                     if tag not in HIDDEN:
                         out.append(("action", tag, attrs, ""))
@@ -477,9 +481,35 @@ def missing_refs(target: Path, text: str) -> str:
             "либо создай эти файлы.")
 
 
+def ps51_compat(cmd: str) -> str:
+    """`a && b` → `a; if (-not $?) { exit 1 }; b`, `a || b` → `a; if ($?) { exit 0 }; b` — вне кавычек."""
+    out, quote, i = [], "", 0
+    while i < len(cmd):
+        c = cmd[i]
+        if quote:
+            if c == quote:
+                quote = ""
+        elif c in "\"'":
+            quote = c
+        elif cmd.startswith("&&", i):
+            out.append("; if (-not $?) { exit 1 };")
+            i += 2
+            continue
+        elif cmd.startswith("||", i):
+            out.append("; if ($?) { exit 0 };")
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def run_shell(cmd: str, cwd: Path, timeout: int, should_stop: Callable[[], bool] | None = None) -> tuple[int, str]:
     if IS_WINDOWS:
-        argv = ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+        shell = shutil.which("pwsh")
+        if not shell:
+            cmd = ps51_compat(cmd)      # Windows PowerShell 5.1 не знает && и ||, а модели пишут их постоянно
+        argv = [shell or "powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
                 "[Console]::OutputEncoding=[Text.Encoding]::UTF8; $ProgressPreference='SilentlyContinue'; " + cmd]
     else:
         argv = ["bash", "-lc", cmd]
@@ -672,8 +702,30 @@ _ROLEPLAY_ANY = re.compile(r"\n\s*\**(?:Система|System|Результат
 _YES = re.compile(r"^\s*(да|ага|давай|подтвержда\w*|выполн\w*|ок|ok|okay|yes|y|конечно|можно|go)\b", re.I)
 
 
+TRACES = ai.USER_CONF.parent / "mindai" / "trajectories.jsonl"
+
+
 def run(chat: dict, history: list[dict], user_text: str, opts: dict, should_stop: Callable[[], bool],
-        inbox: Inbox | None = None) -> Iterator[Event]:
+        inbox: Inbox | None = None, trace: dict | None = None) -> Iterator[Event]:
+    """Цикл агента. Каждый прогон записывается в журнал траекторий MindAI (mindai/README.md): удачные идут
+    в датасет для дообучения собственной модели, неудачные — в «работу над ошибками»."""
+    trace = trace if trace is not None else {}
+    trace.update(ts=time.time(), request=user_text, model="", loop=[], problem="", steps=0)
+    try:
+        yield from _run(chat, history, user_text, opts, should_stop, inbox, trace)
+    finally:
+        trace["ok"] = bool(trace["steps"]) and not trace["problem"] and not should_stop()
+        if os.environ.get("MINDAI_TRACE", "1") != "0" and trace["steps"]:
+            try:
+                TRACES.parent.mkdir(parents=True, exist_ok=True)
+                with TRACES.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(trace, ensure_ascii=False) + "\n")
+            except OSError:
+                pass
+
+
+def _run(chat: dict, history: list[dict], user_text: str, opts: dict, should_stop: Callable[[], bool],
+         inbox: Inbox | None, trace: dict) -> Iterator[Event]:
     """Поток событий как у остальных агентов + ("inject", текст) — сообщение, пришедшее во время работы."""
     aopts = options()
     ws = Path(chat.get("project_path") or aopts["workspace"]).expanduser()
@@ -684,6 +736,8 @@ def run(chat: dict, history: list[dict], user_text: str, opts: dict, should_stop
     if opts.get("system"):
         system += "\n\n" + opts["system"]
     loop: list[dict] = [{"role": "user", "content": user_text}]
+    trace["loop"] = loop
+    trace["system"] = system
 
     # Подтверждение отложенных действий из прошлого ответа
     pending = chat.pop("pending_actions", None)
@@ -795,6 +849,7 @@ def run(chat: dict, history: list[dict], user_text: str, opts: dict, should_stop
                 r = routes.pop(0)
                 if not routed:
                     routed = True
+                    trace["model"] = f"{r.get('provider')}/{r.get('model')}"
                     yield "route", {"agent": "mind", **r, "tier": "агент"}
             raw.append(piece)
             yield from handle(parser.feed(piece))
@@ -815,6 +870,8 @@ def run(chat: dict, history: list[dict], user_text: str, opts: dict, should_stop
         if cut[0]:
             reply = _ROLEPLAY_ANY.split(reply)[0]
         loop.append({"role": "assistant", "content": reply})
+        trace["loop"] = loop
+        trace["steps"] += 1
 
         if blocked:
             chat["pending_actions"] = [{k: b[k] for k in ("tag", "attrs", "body")} for b in blocked]
@@ -889,12 +946,14 @@ def run(chat: dict, history: list[dict], user_text: str, opts: dict, should_stop
                 loop.append({"role": "user", "content": "\n".join(extra)})
                 continue
         if broken:
+            trace["problem"] = broken
             yield "text", _unfixed(broken)
         elif sites and not deployed and not re.search(r"опублик|хостинг|deploy", prev_text, re.I):
             yield "text", (f"\n\n🌐 Могу бесплатно опубликовать сайт в интернете (Surge) — напишите «опубликуй», "
                            "и через минуту у него будет свой адрес.")
         return
     if broken:
+        trace["problem"] = broken
         yield "text", _unfixed(broken)
     if inbox:
         for t in inbox.drain(close_if_empty=True):
@@ -911,7 +970,7 @@ def _unfixed(problem: str) -> str:
 
 # Какие локальные модели лучше справляются с ролью агента (проверено на задаче «игра-головоломка с ярлыком»:
 # qwen3.5:4b пишет полноценную игру, qwen2.5-coder:7b — заготовку). Чем раньше в списке, тем лучше.
-AGENT_MODELS = ("qwen3.6", "qwen3.5", "qwen3-coder", "qwen3", "gemma4", "gemma3", "qwen2.5-coder", "deepseek-coder",
+AGENT_MODELS = ("mindai:", "qwen3.6", "qwen3.5", "qwen3-coder", "qwen3", "gemma4", "gemma3", "qwen2.5-coder", "deepseek-coder",
                 "llama3", "qwen2.5")
 
 

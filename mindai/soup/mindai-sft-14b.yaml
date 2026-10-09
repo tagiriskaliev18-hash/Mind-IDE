@@ -1,0 +1,24 @@
+# MindAI 14B — то же дообучение на Qwen3-14B. 14B в 4 битах (~9 ГБ) не помещается в 8 ГБ видеопамяти, поэтому
+# слои подаются на видеокарту по одному (layer streaming Soup): медленнее, но работает на RTX 4060.
+
+base: Qwen/Qwen3-14B
+task: sft
+
+data:
+  train: ../data/sft.jsonl
+  format: chatml
+  val_split: 0.1
+  max_length: 4096
+
+training:
+  epochs: 2
+  lr: 1e-4
+  batch_size: 1
+  lora:
+    r: 16
+    alpha: 32
+    target_modules: auto
+  quantization: 4bit
+  stream_layers: true
+
+output: ./output/mindai-sft-14b

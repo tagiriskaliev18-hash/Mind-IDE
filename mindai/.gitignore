@@ -1,0 +1,4 @@
+data/*.jsonl
+soup/output/
+soup/.soup*
+bench/results/*.json

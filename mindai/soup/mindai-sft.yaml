@@ -1,0 +1,33 @@
+# MindAI — дообучение на траекториях агента Mind (Soup, https://github.com/MakazhanAlpamys/Soup)
+#   cd mindai/soup
+#   soup train --config mindai-sft.yaml
+#   soup merge  --adapter ./output/mindai-sft
+#   soup export --model ./output/mindai-sft --format gguf --quant q4_k_m
+#   ollama create mindai -f ../Modelfile.trained
+#
+# База — Qwen3.5-9B: новейшее поколение Qwen, целиком помещается в 8 ГБ RTX 4060 в 4 битах. У Qwen3.5 нет версии
+# на 14B; если нужна именно 14B — base: Qwen/Qwen3-14B и stream_layers: true (см. mindai-sft-14b.yaml).
+
+base: Qwen/Qwen3.5-9B
+task: sft
+
+data:
+  train: ../data/sft.jsonl
+  format: chatml
+  val_split: 0.1
+  max_length: 4096
+
+training:
+  epochs: 3
+  lr: 1e-4
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  gradient_checkpointing: true
+  stream_layers: true
+  lora:
+    r: 32
+    alpha: 64
+    target_modules: auto
+  quantization: 4bit
+
+output: ./output/mindai-sft

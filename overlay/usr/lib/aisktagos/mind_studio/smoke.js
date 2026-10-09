@@ -199,8 +199,27 @@ const snap = () => serialize(body).replace(/\d+(\.\d+)?\s*(с|s|сек)\b/g, "")
 const before = snap();
 const visibleBefore = (function vis(n) { return n.nodeType === 3 ? n._text : ["SCRIPT", "STYLE", "TEMPLATE"].includes(n.tagName) ? "" : n.children.map(vis).join(" "); })(body);
 let changed = false, clicks = 0;
+// Поля ввода заполняем, как пользователь: иначе «Добавить» в todo-списке честно ничего не делает
+let typed = 0;
+const typeInto = () => {
+  for (const el of doc.querySelectorAll("input, textarea")) {
+    const t = (el.getAttribute("type") || "text").toLowerCase();
+    if (["checkbox", "radio", "button", "submit", "file", "hidden", "color", "range"].includes(t)) continue;
+    const s0 = snap();
+    el.value = t === "number" ? String(7 + typed) : `Тест ${++typed}`;
+    fire(el, "input"); fire(el, "change");
+    fire(el, "keydown", { key: "Enter", code: "Enter", keyCode: 13 }); fire(el, "keyup", { key: "Enter", code: "Enter", keyCode: 13 });
+    fire(el, "keypress", { key: "Enter", code: "Enter", keyCode: 13 });
+    for (const f of doc.querySelectorAll("form")) fire(f, "submit");
+    runTimers(10);
+    if (snap() !== s0) changed = true;
+  }
+};
+typeInto();
 for (let round = 0; round < 3 && clicks < 60; round++) {
+  if (round) typeInto();
   for (const el of clickable()) {
+    if (["INPUT", "TEXTAREA"].includes(el.tagName) && !el.value) typeInto();
     if (clicks >= 60) break;
     if (!el.parentNode && el !== doc) continue;
     const s0 = snap();
