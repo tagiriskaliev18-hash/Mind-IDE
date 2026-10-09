@@ -55,7 +55,47 @@ def _fail(text: str) -> None:
         print(text, file=sys.stderr)
 
 
+# Ярлыки Mind на рабочем столе всегда с логотипом Mind (tools/windows/mind.ico): чинит старые ярлыки без иконки
+# и создаёт Mind.lnk при первом запуске свежего клона. Работает в фоне, запуск окна не задерживает.
+_SHORTCUT_PS = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$launcher = $env:MIND_LAUNCHER; $icon = $env:MIND_ICON; $pyw = $env:MIND_PYW
+$sh = New-Object -ComObject WScript.Shell
+$desk = [Environment]::GetFolderPath('Desktop')
+$found = $false
+foreach ($f in Get-ChildItem -Path $desk -Filter *.lnk) {
+    $s = $sh.CreateShortcut($f.FullName)
+    if ($s.Arguments -like '*launch-studio.py*' -or $s.TargetPath -like '*launch-studio.py') {
+        $found = $true
+        if ($s.IconLocation -ne "$icon,0") { $s.IconLocation = "$icon,0"; $s.Save() }
+    }
+}
+if (-not $found) {
+    $s = $sh.CreateShortcut((Join-Path $desk 'Mind.lnk'))
+    $s.TargetPath = $pyw; $s.Arguments = '"' + $launcher + '"'; $s.WorkingDirectory = Split-Path $launcher
+    $s.IconLocation = "$icon,0"; $s.Description = 'Mind Studio'; $s.Save()
+}
+"""
+
+
+def _ensure_shortcut() -> None:
+    if sys.platform != "win32" or len(sys.argv) > 1 or os.environ.get("MIND_NO_SHORTCUT"):
+        return
+    import subprocess
+    icon = PROJECT / "tools" / "windows" / "mind.ico"
+    pyw = py.with_name("pythonw.exe")
+    env = {**os.environ, "MIND_LAUNCHER": str(Path(__file__).resolve()), "MIND_ICON": str(icon),
+           "MIND_PYW": str(pyw if pyw.exists() else py)}
+    try:
+        subprocess.Popen(["powershell", "-NoProfile", "-NonInteractive", "-Command", _SHORTCUT_PS], env=env,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except OSError:
+        pass
+
+
 def main() -> int:
+    _ensure_shortcut()
     script = LIB_DIR / "aisktag-studio.py"
     sys.argv[0] = str(script)
     try:
