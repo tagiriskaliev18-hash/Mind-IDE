@@ -641,9 +641,38 @@ def _stream_claude(messages: list[dict], cfg: dict, max_tokens: int | None,
                     yield delta["text"]
 
 
+def _stream_ollama(messages: list[dict], cfg: dict, max_tokens: int | None,
+                   temperature: float, should_stop: Callable[[], bool] | None) -> Iterator[str]:
+    """Родной API Ollama (/api/chat): в отличие от /v1 принимает размер контекста (num_ctx) — агенту Mind
+    нужен длинный контекст, иначе файл сайта обрезается на полуслове."""
+    opts = {"temperature": temperature, **(cfg.get("ollama_options") or {})}
+    if max_tokens:
+        opts["num_predict"] = max_tokens
+    body = {"model": cfg["model"], "messages": messages, "stream": True, "options": opts}
+    req = urllib.request.Request(OLLAMA_URL + "/api/chat", data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    with _open(req, {**cfg, "base_url": OLLAMA_URL}, "Ollama") as resp:
+        for raw in resp:
+            if should_stop and should_stop():
+                return
+            try:
+                event = json.loads(raw)
+            except ValueError:
+                continue
+            if event.get("error"):
+                raise AIError(f"Ollama ({cfg['model']}): {event['error']}", retry=True, cooldown=120, model_only=True)
+            piece = (event.get("message") or {}).get("content")
+            if piece:
+                yield piece
+            if event.get("done"):
+                return
+
+
 def _stream_direct(messages, cfg, max_tokens, temperature, should_stop) -> Iterator[str]:
     kind = PROVIDERS.get(cfg.get("provider", ""), {}).get("kind", "openai")
-    if kind == "claude":
+    if cfg.get("provider") == "ollama" and cfg.get("ollama_options"):
+        yield from _stream_ollama(messages, cfg, max_tokens, temperature, should_stop)
+    elif kind == "claude":
         yield from _stream_claude(messages, cfg, max_tokens, temperature, should_stop)
     else:
         yield from _stream_openai(messages, cfg, max_tokens, temperature, should_stop)

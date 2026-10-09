@@ -16,7 +16,13 @@
 
 **Mind Studio** (`launch-studio.py`) — веб-интерфейс в окне Qt WebEngine. Один чат обращается к нескольким агентам:
 
-- **Mind** — маршрутизатор моделей: локальная llama.cpp, Ollama (модели находятся сами, без ключей), NVIDIA, Groq, Gemini, OpenRouter, DeepSeek, Kimi, OpenAI, Claude;
+- **Mind** — агент на ваших моделях (локальная llama.cpp, Ollama без ключей, NVIDIA, Groq, Gemini, OpenRouter, DeepSeek,
+  Kimi, OpenAI, Claude). Философия — максимальная простота для кодинга: Mind не просит копировать код, а сам создаёт
+  проекты и файлы, запускает команды, делает ярлыки на рабочем столе, git и публикацию на GitHub, бесплатный хостинг
+  сайтов через Surge — и показывает в чате каждый шаг. Свою страницу он сам проверяет: синтаксис через Node и
+  «дымовой тест» (`smoke.js`), который кликает по всему кликабельному, и сам чинит найденное. Писать можно и пока
+  Mind работает — сообщение попадёт в текущую задачу. По умолчанию работает без подтверждений, но перед необратимым
+  (удаление файлов, force-push, перезапись файлов вне рабочей папки) спрашивает «да»; это в «Настройки → Агенты»;
 - **Claude** — Claude Code на аккаунте пользователя (`claude -p`), сессия продолжается на весь чат;
 - **Antigravity** — через agentapi самого Antigravity (мост запускается из его терминала: `--link-antigravity`,
   или сам при каждом старте Antigravity после `launch-studio.py --install-antigravity-autostart` / кнопки «Запускать автоматически»);
@@ -85,6 +91,7 @@ mindkit link autostart on
 ```powershell
 python tools/test-mind-router.py   # маршрутизатор, без сети
 python tools/test-studio.py        # API и интерфейс Mind Studio (интерфейс через Playwright)
+python tools/test-mind-agent.py    # агент Mind: действия, подтверждения, сообщения во время работы
 ```
 
 ## 🌐 Часть экосистемы MindTagSystem

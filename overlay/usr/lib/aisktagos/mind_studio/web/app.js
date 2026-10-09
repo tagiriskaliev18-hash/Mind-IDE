@@ -25,7 +25,7 @@ const ICONS = {
 
 const S = {
   state: null, chats: [], chat: null, agent: "mind", mode: "auto", skills: [], attachments: [],
-  busy: false, view: "chat", theme: localStorage.getItem("theme") || "light",
+  busy: false, queue: [], view: "chat", theme: localStorage.getItem("theme") || "light",
 };
 
 // ---------------------------------------------------------------- API
@@ -256,8 +256,17 @@ function scrollDown(force = false) {
 
 // ---------------------------------------------------------------- отправка
 async function send() {
-  if (S.busy) return stop();
   const input = $("#input");
+  if (S.busy) {
+    // Пока агент работает, новое сообщение попадает прямо в задачу; пустое поле — кнопка «Стоп»
+    const t = input.value.trim();
+    if (!t) return stop();
+    input.value = ""; autosize();
+    const r = await api(`chats/${S.chat.id}/inject`, { method: "POST", body: { text: t } }).catch(() => ({}));
+    if (!r.queued) { S.queue.push(t); toast("Отправлю, как только агент закончит"); }
+    else toast("Добавлено в задачу — Mind учтёт после текущего шага");
+    return;
+  }
   const text = input.value.trim();
   if (!text && !S.attachments.length) return;
   if (S.chat.readonly) return;
@@ -268,7 +277,7 @@ async function send() {
   input.value = ""; autosize();
   const attachments = S.attachments; S.attachments = []; renderChips();
   S.chat.messages.push({ role: "user", content: text, shown: text, attachments: attachments.map((a) => a.name) });
-  const ans = { role: "assistant", agent: S.agent, content: "", route: {}, activity: [] };
+  let ans = { role: "assistant", agent: S.agent, content: "", route: {}, activity: [] };
   S.chat.messages.push(ans);
   const feed = $("#feed");
   if (S.chat.messages.length === 2) feed.innerHTML = "";
@@ -302,6 +311,18 @@ async function send() {
         else if (ev === "route") ans.route = data;
         else if (ev === "activity") ans.activity.push(data);
         else if (ev === "error") ans.error = data;
+        else if (ev === "inject") {
+          // Сообщение, написанное во время работы: текущая часть ответа закрывается, продолжение идёт ниже
+          const live = $("#live");
+          if (live) { live.outerHTML = renderMsg(ans); bindCode(feed); }
+          const um = { role: "user", content: data, shown: data };
+          ans = { role: "assistant", agent: S.agent, content: "", route: ans.route, activity: [] };
+          S.chat.messages.push(um, ans);
+          feed.insertAdjacentHTML("beforeend", renderMsg(um));
+          feed.insertAdjacentHTML("beforeend", `<div class="msg assistant" id="live">${liveInner(ans)}</div>`);
+          scrollDown(true);
+          continue;
+        }
         else if (ev === "chat") { S.chat.title = data.title; crumbs([S.chat.project || "Mind Studio", data.title]); }
         if (!pending) { pending = true; requestAnimationFrame(paint); }
       }
@@ -314,6 +335,7 @@ async function send() {
   if (live) { live.outerHTML = renderMsg(ans); feed.lastElementChild.style.animation = "none"; bindCode(feed); }
   if (!ans.content && !ans.error) toast("Ответ пустой — попробуйте другой режим или агента");
   loadSide();
+  if (S.queue.length) { input.value = S.queue.shift(); send(); }
 }
 
 function liveInner(m) {
@@ -335,8 +357,8 @@ async function stop() {
 function setBusy(b) {
   S.busy = b;
   $("#btn-send").classList.toggle("busy", b);
-  $("#btn-send").title = b ? "Остановить" : "Отправить (Enter)";
-  $("#hint").textContent = b ? agentMeta(S.agent).title + " отвечает…" : "";
+  $("#btn-send").title = b ? "Пустое поле — остановить, с текстом — добавить в задачу" : "Отправить (Enter)";
+  $("#hint").textContent = b ? agentMeta(S.agent).title + " работает… можно писать — сообщение попадёт в задачу" : "";
 }
 
 // ---------------------------------------------------------------- выбор агента, режима, скиллов
@@ -502,7 +524,12 @@ async function openSettings(tab = "general") {
         <input type="password" data-key="${id}" placeholder="${k.env ? "задан в " + esc(k.var) : k.saved ? "сохранён · вставьте новый, чтобы заменить" : "вставьте ключ"}"></div>`).join("") +
       `</div><div class="save-bar"><button class="btn primary" id="save-keys">Сохранить ключи</button></div>`;
   } else if (tab === "agents") {
-    html = `<div class="group">Claude Code</div><div class="set-card">
+    html = `<div class="group">Mind-агент</div><div class="set-card">
+      <div class="set-row"><div class="l"><b>Работать без подтверждений</b><span>Mind сам создаёт файлы, запускает команды, делает ярлыки и публикует, не спрашивая на каждом шаге</span></div>${sw("agent_bypass", st.agent_bypass)}</div>
+      <div class="set-row"><div class="l"><b>Спрашивать перед необратимым</b><span>Удаление файлов, force-push, перезапись файлов вне рабочей папки — только после вашего «да»</span></div>${sw("agent_confirm_danger", st.agent_confirm_danger)}</div>
+      <div class="set-row"><div class="l"><b>Рабочая папка</b><span>Здесь Mind создаёт проекты, если у разговора нет своей папки</span></div>
+        <input type="text" id="ws-path" value="${esc(st.agent_workspace)}"><button class="btn" id="ws-save">Сохранить</button></div></div>
+      <div class="group">Claude Code</div><div class="set-card">
       <div class="set-row"><div class="l"><b>Разрешить Claude править файлы проекта</b><span>Иначе Claude только читает и отвечает. Правки идут в папку проекта разговора.</span></div>${sw("claude_edit", st.claude_edit)}</div>
       <div class="set-row"><div class="l"><b>Модель Claude</b><span>Пусто — модель по умолчанию вашей подписки</span></div>
         <div class="seg">${[["", "Авто"], ["haiku", "Haiku"], ["sonnet", "Sonnet"], ["opus", "Opus"]].map(([v, n]) => `<button data-cm="${v}" class="${(st.claude_model || "") === v ? "on" : ""}">${n}</button>`).join("")}</div></div></div>
@@ -532,6 +559,7 @@ function bindSettings(tab) {
     if (!Object.keys(keys).length) return toast("Введите хотя бы один ключ");
     await save({ keys }, "Ключи сохранены"); openSettings("keys");
   };
+  const ws = $("#ws-save"); if (ws) ws.onclick = () => save({ agent_workspace: $("#ws-path").value.trim() });
   const ga = $("#go-agents"); if (ga) ga.onclick = () => { closeSettings(); showAgents(); };
   $$("[data-rmp]").forEach((b) => b.onclick = async () => { const p = S.settings.projects.filter((_, i) => i !== +b.dataset.rmp); await save({ projects: p }); openSettings("projects"); loadSide(); });
   const ap = $("#add-proj"); if (ap) ap.onclick = async () => {

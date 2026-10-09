@@ -16,11 +16,12 @@ from urllib.parse import unquote, urlparse
 
 import aisktag_ai as ai
 
-from . import agents, antigravity, continuity, store
+from . import agents, antigravity, continuity, mind_agent, store
 
 WEB = Path(__file__).resolve().parent / "web"
 TOKEN = secrets.token_urlsafe(24)
 _STOPS: dict[str, threading.Event] = {}
+_INBOXES: dict[str, mind_agent.Inbox] = {}   # сообщения, написанные, пока Mind работает
 
 PERSONAS = [{"id": k, "name": v[0]} for k, v in ai.PERSONAS.items()]
 MODES = [
@@ -62,7 +63,9 @@ def _settings_view() -> dict:
     return {"keys": keys, "auto": cfg.get("provider") in (None, "auto"), "cache": bool(cfg.get("cache", True)),
             "projects": store.projects(), "claude_edit": bool(st.get("claude_edit")),
             "claude_model": st.get("claude_model", "sonnet"), "theme": st.get("theme", "light"),
-            "config_path": str(ai.USER_CONF)}
+            "agent_bypass": bool(st.get("agent_bypass", True)),
+            "agent_confirm_danger": bool(st.get("agent_confirm_danger", True)),
+            "agent_workspace": mind_agent.options()["workspace"], "config_path": str(ai.USER_CONF)}
 
 
 def _save_settings(data: dict) -> None:
@@ -79,7 +82,10 @@ def _save_settings(data: dict) -> None:
     if "cache" in data:
         cfg["cache"] = bool(data["cache"])
     ai.save_config(cfg)
-    extra = {k: data[k] for k in ("claude_edit", "claude_model", "theme") if k in data}
+    extra = {k: data[k] for k in ("claude_edit", "claude_model", "theme", "agent_bypass", "agent_confirm_danger")
+             if k in data}
+    if isinstance(data.get("agent_workspace"), str) and data["agent_workspace"].strip():
+        extra["agent_workspace"] = data["agent_workspace"].strip()
     if isinstance(data.get("projects"), list):
         extra["projects"] = [{"name": str(p.get("name") or Path(p["path"]).name), "path": str(p["path"])}
                              for p in data["projects"] if isinstance(p, dict) and p.get("path")
@@ -132,7 +138,12 @@ def _run(chat: dict, req: dict, stop: threading.Event, emit) -> None:
         opts["tier"] = mode
 
     should_stop = stop.is_set
-    if agent == "mind":
+    if agent == "mind" and opts["mode"] != "council":
+        # Mind — агент: сам создаёт файлы, запускает команды, делает ярлыки; новые сообщения попадают в задачу
+        inbox = _INBOXES[chat["id"]] = mind_agent.Inbox()
+        extra = _system_prompt(chat, req) if req.get("skills") or chat.get("project") else ""
+        gen = mind_agent.run(chat, history[:-1], content, {**opts, "system": extra}, should_stop, inbox)
+    elif agent == "mind":
         gen = agents.run_mind([{"role": "system", "content": system}] + history, opts, should_stop)
     elif agent == "claude":
         gen = agents.run_claude(content, opts, should_stop)
@@ -154,6 +165,12 @@ def _run(chat: dict, req: dict, stop: threading.Event, emit) -> None:
             elif kind == "meta":
                 chat.update(data)
                 continue
+            elif kind == "inject":
+                # Пользователь написал во время работы: текущая часть ответа закрывается, дальше — продолжение
+                chat["messages"].append(answer)
+                chat["messages"].append({"role": "user", "content": str(data), "shown": str(data)})
+                store.save_chat(chat)
+                answer = {"role": "assistant", "content": "", "agent": agent, "route": answer["route"], "activity": []}
             emit(kind, data)
     except ai.AIError as e:
         answer["error"] = str(e)
@@ -161,6 +178,10 @@ def _run(chat: dict, req: dict, stop: threading.Event, emit) -> None:
     except Exception as e:  # noqa: BLE001 — любая ошибка агента показывается в чате, сервер живёт дальше
         answer["error"] = f"Неожиданная ошибка: {e}"
         emit("error", answer["error"])
+    finally:
+        box = _INBOXES.pop(chat["id"], None)
+        if box:
+            box.drain(close_if_empty=True)
     if stop.is_set():
         answer["stopped"] = True
     chat["messages"].append(answer)
@@ -289,6 +310,10 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:  # noqa: BLE001 — MindKit сообщает понятным текстом
                 return self._json({"error": str(e)}, 500)
             return self._json({"devices": res})
+        if len(parts) == 3 and parts[0] == "chats" and parts[2] == "inject":
+            box = _INBOXES.get(parts[1])
+            text = str(req.get("text", "")).strip()
+            return self._json({"queued": bool(text and box and box.put(text))})
         if len(parts) == 3 and parts[0] == "chats" and parts[2] == "stop":
             ev = _STOPS.get(parts[1])
             if ev:
