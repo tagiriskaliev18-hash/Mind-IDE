@@ -72,18 +72,25 @@ python tools/test-mind-router.py   # маршрутизатор, без сети
 python tools/test-studio.py        # API и интерфейс Mind Studio (интерфейс через Playwright)
 ```
 
-## Экосистема MindTagSystem
+## 🌐 Часть экосистемы MindTagSystem
 
-Mind связан с другими проектами экосистемы:
+Mind IDE входит в **[MindTagSystem](https://github.com/tagiriskaliev18-hash/MindTagSystem)** — экосистему для программистов, которую создаёт **Тагир Искалиев** ([@tagiriskaliev18-hash](https://github.com/tagiriskaliev18-hash)): своя операционная система, браузер, IDE, ИИ-ядро и приложения, которые работают вместе и которые можно встроить в любое устройство.
 
-- [AisktagOS](https://github.com/tagiriskaliev18-hash/AisktagOS) — операционная система, куда Mind встроен как системный ИИ;
-- [ITIS-browser](https://github.com/tagiriskaliev18-hash/ITIS-browser) — браузер экосистемы;
-- [multimodel-agent](https://github.com/tagiriskaliev18-hash/multimodel-agent) и
-  [antigravity-claude-bridge](https://github.com/tagiriskaliev18-hash/antigravity-claude-bridge) — мультимодельный агент и мост Antigravity ↔ Claude;
-- [qwen14b-coder-dev](https://github.com/tagiriskaliev18-hash/qwen14b-coder-dev) — локальная модель для кода.
+**Роль в экосистеме:** собственная среда разработки экосистемы (слой «Инструменты разработчика»).
 
-Полное описание экосистемы, её философии и всех проектов — в репозитории
-[MindTagSystem](https://github.com/tagiriskaliev18-hash/MindTagSystem).
+| Слой | Проект | Что делает |
+|---|---|---|
+| Платформа | [AIsktagOS](https://github.com/tagiriskaliev18-hash/AisktagOS) | Операционная система для разработчиков в стиле macOS на любом железе |
+| Инструменты разработчика | **Mind IDE** ← вы здесь | ИИ-среда разработки: один чат с моделями, Claude Code и Antigravity |
+| Инструменты разработчика | [ITIS Browser](https://github.com/tagiriskaliev18-hash/ITIS-browser) | Браузер с ИИ-агентом, который сам кликает и листает страницы |
+| ИИ-ядро | [AI Duo (multimodel-agent)](https://github.com/tagiriskaliev18-hash/multimodel-agent) | Единый ИИ-шлюз с OpenAI-совместимым API для всех моделей |
+| ИИ-ядро | [Antigravity ↔ Claude Code Bridge](https://github.com/tagiriskaliev18-hash/antigravity-claude-bridge) | MCP-мост, который связывает Antigravity, Claude Code и пул моделей |
+| ИИ-ядро | [Qwen 14B Coder Dev](https://github.com/tagiriskaliev18-hash/qwen14b-coder-dev) | Локальная офлайн-модель для программирования в Ollama |
+| Приложения | [FileHub AI](https://github.com/tagiriskaliev18-hash/filehub-ai) | Хранилище файлов с ИИ-агентом для Word, PowerPoint и Excel |
+| Приложения | [SortApp (анализатор логов)](https://github.com/tagiriskaliev18-hash/sortapp) | Анализатор журналов доступа к сетевым папкам с отчётами Excel |
+| Приложения | [ИИ Доктор (medical-ai-assistant)](https://github.com/tagiriskaliev18-hash/medical-ai-assistant) | Офлайн-ассистент врача приёмного покоя |
+
+Как проекты связаны между собой: [архитектура MindTagSystem](https://github.com/tagiriskaliev18-hash/MindTagSystem/blob/main/docs/ARCHITECTURE.md). Автор всех проектов экосистемы — Тагир Искалиев.
 
 ---
 
