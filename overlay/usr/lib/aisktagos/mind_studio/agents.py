@@ -48,6 +48,7 @@ def status() -> dict:
         "claude": {"ready": bool(claude_exe()), "detail": "Claude Code найден" if claude_exe()
                    else "Claude Code не установлен"},
         "antigravity": {"ready": antigravity.linked(), "installed": antigravity.installed(),
+                        "autostart": antigravity.autostart_installed(),
                         "detail": "мост подключён" if antigravity.linked() else
                         (antigravity.last_error() or "попросите агента Antigravity запустить мост")
                         if antigravity.installed() else "Antigravity не найден"},

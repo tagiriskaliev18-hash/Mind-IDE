@@ -151,8 +151,14 @@ def run_agentapi(args: list[str], timeout: int = 120) -> dict:
     return data if isinstance(data, dict) else {"raw": out}
 
 
-def serve_link(port: int = 0) -> int:
-    """Запускает мост. Возвращает код выхода (вызывается из командной строки)."""
+def serve_link(port: int = 0, *, mcp: bool = False) -> int:
+    """Запускает мост. Возвращает код выхода (вызывается из командной строки).
+
+    mcp=True — мост запущен самим Antigravity как MCP-сервер (см. install_autostart): stdout занят протоколом
+    MCP, мост работает в фоне, пока Antigravity держит процесс.
+    """
+    if mcp:
+        return _serve_mcp(port)
     store.DATA.mkdir(parents=True, exist_ok=True)
     if not (os.environ.get("ANTIGRAVITY_LS_ADDRESS") and os.environ.get("ANTIGRAVITY_CSRF_TOKEN")):
         msg = ("Мост запущен не агентом Antigravity: в этом окне нет адреса и токена Antigravity. "
@@ -169,6 +175,28 @@ def serve_link(port: int = 0) -> int:
             LINK_ERR.write_text(json.dumps({"error": msg, "time": time.time()}, ensure_ascii=False), encoding="utf-8")
             print(msg, file=sys.stderr)
             return 3
+    srv = _start_bridge(port)
+    print(f"Мост Antigravity ↔ Mind Studio работает (127.0.0.1:{srv.server_address[1]}). "
+          "Не закрывайте этот терминал; Ctrl+C — отключить.")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        _drop_link()
+    return 0
+
+
+def _drop_link() -> None:
+    try:
+        if (_link() or {}).get("pid") == os.getpid():
+            LINK_FILE.unlink()
+    except OSError:
+        pass
+
+
+def _start_bridge(port: int = 0) -> ThreadingHTTPServer:
+    """Создаёт HTTP-сервер моста и записывает его адрес в antigravity-link.json (сам сервер не запускает)."""
     try:
         LINK_ERR.unlink()
     except OSError:
@@ -223,18 +251,93 @@ def serve_link(port: int = 0) -> int:
         LINK_FILE.chmod(0o600)
     except OSError:
         pass
-    print(f"Мост Antigravity ↔ Mind Studio работает (127.0.0.1:{srv.server_address[1]}). "
-          "Не закрывайте этот терминал; Ctrl+C — отключить.")
-    try:
-        srv.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
+    return srv
+
+
+# ---------------------------------------------------------------------------
+# Автозапуск: Antigravity сам поднимает мост как MCP-сервер при каждом старте
+# ---------------------------------------------------------------------------
+
+MCP_CONFIG = ROOT / "mcp_config.json"
+MCP_NAME = "mind-studio-link"
+
+
+def _serve_mcp(port: int = 0) -> int:
+    """Минимальный MCP-сервер (stdio) с одним инструментом статуса; мост — в фоновом потоке."""
+    import threading
+    state = {"text": ""}
+    store.DATA.mkdir(parents=True, exist_ok=True)
+    if os.environ.get("ANTIGRAVITY_LS_ADDRESS") and os.environ.get("ANTIGRAVITY_CSRF_TOKEN"):
+        srv = _start_bridge(port)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        state["text"] = f"Мост Mind Studio работает (127.0.0.1:{srv.server_address[1]})."
+    else:
+        state["text"] = ("Antigravity не передал MCP-серверу адрес и токен — мост не запущен. "
+                         "Попросите агента Antigravity выполнить команду моста в терминале.")
+        LINK_ERR.write_text(json.dumps({"error": state["text"], "time": time.time()}, ensure_ascii=False),
+                            encoding="utf-8")
+    print(state["text"], file=sys.stderr)
+
+    def send(obj: dict) -> None:
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+
+    for stream in (sys.stdin, sys.stdout):
         try:
-            LINK_FILE.unlink()
-        except OSError:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
             pass
+    tool = {"name": "mind_studio_link_status", "description": "Состояние моста Antigravity ↔ Mind Studio",
+            "inputSchema": {"type": "object", "properties": {}}}
+    try:
+        for line in sys.stdin:
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            mid, method = msg.get("id"), msg.get("method", "")
+            if mid is None:
+                continue                      # уведомления ответа не требуют
+            if method == "initialize":
+                res = {"protocolVersion": (msg.get("params") or {}).get("protocolVersion", "2024-11-05"),
+                       "capabilities": {"tools": {}}, "serverInfo": {"name": MCP_NAME, "version": "1.0"}}
+            elif method == "tools/list":
+                res = {"tools": [tool]}
+            elif method == "tools/call":
+                res = {"content": [{"type": "text", "text": state["text"]}]}
+            elif method in ("ping", "resources/list", "prompts/list"):
+                res = {} if method == "ping" else {method.split("/")[0]: []}
+            else:
+                send({"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "method not found"}})
+                continue
+            send({"jsonrpc": "2.0", "id": mid, "result": res})
+    finally:
+        _drop_link()
     return 0
+
+
+def autostart_installed() -> bool:
+    try:
+        return MCP_NAME in json.loads(MCP_CONFIG.read_text(encoding="utf-8")).get("mcpServers", {})
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def install_autostart(command: list[str]) -> str:
+    """Добавляет мост в mcp_config.json Antigravity (остальные серверы не трогает). Возвращает путь к файлу."""
+    try:
+        cfg = json.loads(MCP_CONFIG.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        cfg = {}
+    except ValueError as e:
+        raise AntigravityError(f"mcp_config.json Antigravity повреждён: {e}") from e
+    servers = cfg.setdefault("mcpServers", {})
+    servers[MCP_NAME] = {"command": command[0], "args": command[1:]}
+    MCP_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    tmp = MCP_CONFIG.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(MCP_CONFIG)
+    return str(MCP_CONFIG)
 
 
 # ---------------------------------------------------------------------------

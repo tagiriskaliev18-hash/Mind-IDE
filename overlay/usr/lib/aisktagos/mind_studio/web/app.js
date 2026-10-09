@@ -444,13 +444,20 @@ function showAgents() {
       <div class="actions"><button class="btn" data-open-settings="agents">Настроить</button></div></div>
     <div class="card"><h3><span class="ic antigravity" style="width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:#fff">${ICONS.antigravity}</span>Antigravity
       <span class="badge ${st.antigravity.ready ? "ok" : "off"}">${st.antigravity.ready ? "подключён" : "мост не запущен"}</span></h3>
-      <p>Агент Antigravity отвечает прямо здесь. Один раз за сеанс Antigravity отправьте <b>в чат Antigravity</b> эту просьбу — его агент сам запустит мост:</p>
+      ${st.antigravity.autostart
+        ? `<p>Агент Antigravity отвечает прямо здесь. Мост запускается сам вместе с Antigravity. Если он не подключился, перезапустите Antigravity или отправьте <b>в чат Antigravity</b> эту просьбу:</p>`
+        : `<p>Агент Antigravity отвечает прямо здесь. Нажмите «Запускать автоматически» и перезапустите Antigravity — мост будет подниматься сам. Или один раз за сеанс отправьте <b>в чат Antigravity</b> эту просьбу:</p>`}
       <pre class="howto">${esc(linkAsk())}</pre>
       ${st.antigravity.ready ? "" : `<p style="margin-top:8px;color:var(--muted);font-size:12.5px">${esc(st.antigravity.detail)}</p>`}
-      <div class="actions"><button class="btn primary" id="copy-link">Скопировать просьбу</button><button class="btn" id="recheck">Проверить</button></div></div>
+      <div class="actions"><button class="btn primary" id="copy-link">Скопировать просьбу</button><button class="btn" id="recheck">Проверить</button>${st.antigravity.autostart || !st.antigravity.installed ? "" : '<button class="btn" id="agy-autostart">Запускать автоматически</button>'}</div></div>
   </div>`;
   $$("[data-open-settings]").forEach((b) => b.onclick = () => openSettings(b.dataset.openSettings));
   $("#copy-link").onclick = () => { navigator.clipboard.writeText(linkAsk()); toast("Скопировано — вставьте в чат Antigravity"); };
+  const auto = $("#agy-autostart");
+  if (auto) auto.onclick = async () => {
+    try { await api("antigravity/autostart", { method: "POST", body: {} }); await refreshState(); showAgents(); toast("Готово — перезапустите Antigravity"); }
+    catch (e) { toast("Не удалось: " + e.message); }
+  };
   $("#recheck").onclick = async () => { await refreshState(); showAgents(); toast(S.state.status.antigravity.ready ? "Antigravity подключён" : "Мост пока не отвечает"); };
 }
 

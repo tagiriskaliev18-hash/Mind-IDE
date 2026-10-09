@@ -490,7 +490,7 @@ class SettingsDialog(QDialog):
         form = QFormLayout()
         self.fields: dict[str, QLineEdit] = {}
         for name, p in ai.PROVIDERS.items():
-            if name == "local":
+            if not p["env"]:      # локальные службы без ключа
                 continue
             f = QLineEdit()
             f.setEchoMode(QLineEdit.EchoMode.Password)

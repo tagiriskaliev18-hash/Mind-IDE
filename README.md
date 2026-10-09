@@ -16,9 +16,10 @@
 
 **Mind Studio** (`launch-studio.py`) — веб-интерфейс в окне Qt WebEngine. Один чат обращается к нескольким агентам:
 
-- **Mind** — маршрутизатор моделей: локальная llama.cpp, NVIDIA, Groq, Gemini, OpenRouter, DeepSeek, Kimi, OpenAI, Claude;
+- **Mind** — маршрутизатор моделей: локальная llama.cpp, Ollama (модели находятся сами, без ключей), NVIDIA, Groq, Gemini, OpenRouter, DeepSeek, Kimi, OpenAI, Claude;
 - **Claude** — Claude Code на аккаунте пользователя (`claude -p`), сессия продолжается на весь чат;
-- **Antigravity** — через agentapi самого Antigravity (мост запускается из его терминала: `--link-antigravity`);
+- **Antigravity** — через agentapi самого Antigravity (мост запускается из его терминала: `--link-antigravity`,
+  или сам при каждом старте Antigravity после `launch-studio.py --install-antigravity-autostart` / кнопки «Запускать автоматически»);
 - **Все сразу** — агенты отвечают параллельно, Mind сводит лучший ответ.
 
 Также есть навыки (skills), история чатов и тёмная тема в дизайн-системе Aurora.

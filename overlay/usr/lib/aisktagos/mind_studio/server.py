@@ -52,7 +52,7 @@ def _settings_view() -> dict:
     cfg = ai.load_config()
     keys = {}
     for name, p in ai.PROVIDERS.items():
-        if name == "local":
+        if not p["env"]:      # локальные службы без ключа
             continue
         keys[name] = {"title": p["title"], "free": p["free"], "description": p["description"],
                       "env": any(os.environ.get(e) for e in p["env"]),
@@ -269,6 +269,13 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["settings"]:
             _save_settings(req)
             return self._json(_settings_view())
+        if parts == ["antigravity", "autostart"]:
+            cmd = json.loads(os.environ.get("AISKTAG_STUDIO_SELF") or '["aisktag-studio"]')
+            try:
+                path = antigravity.install_autostart(cmd + ["--link-antigravity", "--mcp"])
+            except (antigravity.AntigravityError, OSError) as e:
+                return self._json({"error": str(e)}, 500)
+            return self._json({"ok": True, "path": path})
         if parts == ["cache", "clear"]:
             ai.reset_cooldowns()
             return self._json({"cleared": ai.clear_cache()})

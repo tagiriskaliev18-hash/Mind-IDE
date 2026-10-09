@@ -57,6 +57,10 @@ def _cache_home() -> Path:
 
 LOCAL_URL      = "http://127.0.0.1:6573/v1"
 BACKEND_HEALTH = "http://127.0.0.1:6574/health"
+OLLAMA_URL     = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+if "://" not in OLLAMA_URL:
+    OLLAMA_URL = "http://" + OLLAMA_URL
+OLLAMA_URL = OLLAMA_URL.replace("://0.0.0.0", "://127.0.0.1")
 USER_CONF      = _config_home() / "aisktagos" / "ai.json"
 CACHE_DIR      = _cache_home() / "aisktagos" / "mind"
 CATALOG        = Path(os.environ.get("AISKTAG_CATALOG", "/usr/share/aisktagos/ai/models.json"))
@@ -78,6 +82,11 @@ PROVIDERS: dict[str, dict] = {
         "title": "Локальная модель", "kind": "openai", "base_url": LOCAL_URL, "env": [], "free": True,
         "models": {"fast": ["aisktag-mind"], "code": ["aisktag-mind"], "deep": ["aisktag-mind"]},
         "description": "llama.cpp на этом компьютере, работает без интернета",
+    },
+    "ollama": {
+        "title": "Ollama", "kind": "openai", "base_url": OLLAMA_URL + "/v1", "env": [], "free": True,
+        "models": {"fast": [], "code": [], "deep": []},   # берутся из установленных в Ollama моделей
+        "description": "модели Ollama на этом компьютере, без интернета и ключей",
     },
     "groq": {
         "title": "Groq", "kind": "openai", "base_url": "https://api.groq.com/openai/v1",
@@ -138,9 +147,9 @@ PROVIDERS: dict[str, dict] = {
 
 # Очередь по умолчанию: бесплатные и быстрые первыми, платные — только если больше некому ответить
 DEFAULT_ROUTE: dict[str, list[str]] = {
-    "fast": ["local", "groq", "gemini", "nvidia", "openrouter", "deepseek", "kimi", "openai", "claude"],
-    "code": ["groq", "nvidia", "gemini", "deepseek", "openrouter", "kimi", "local", "openai", "claude"],
-    "deep": ["nvidia", "gemini", "kimi", "deepseek", "groq", "openrouter", "claude", "openai", "local"],
+    "fast": ["local", "ollama", "groq", "gemini", "nvidia", "openrouter", "deepseek", "kimi", "openai", "claude"],
+    "code": ["groq", "nvidia", "gemini", "deepseek", "openrouter", "kimi", "local", "ollama", "openai", "claude"],
+    "deep": ["nvidia", "gemini", "kimi", "deepseek", "groq", "openrouter", "claude", "openai", "local", "ollama"],
 }
 
 DEFAULTS = {
@@ -272,16 +281,47 @@ def provider_key(name: str, cfg: dict | None = None) -> str:
     return (cfg.get("keys") or {}).get(name, "")
 
 
+_ollama_seen: tuple[float, list[dict]] = (0.0, [])
+
+
+def ollama_models() -> list[dict]:
+    """Модели, установленные в Ollama (GET /api/tags, кэш 30 с). Пусто — Ollama не запущен или моделей нет."""
+    global _ollama_seen
+    if time.time() - _ollama_seen[0] < 30:
+        return _ollama_seen[1]
+    try:
+        with urllib.request.urlopen(OLLAMA_URL + "/api/tags", timeout=0.6) as r:
+            found = [m for m in json.load(r).get("models", []) if isinstance(m, dict) and m.get("name")
+                     and "embed" not in m["name"]]
+    except (urllib.error.URLError, OSError, ValueError, AttributeError):
+        found = []
+    _ollama_seen = (time.time(), found)
+    return found
+
+
+def _ollama_order(tier: str) -> list[str]:
+    """Модели Ollama под уровень задачи: для кода — кодеры, для быстрых ответов — самые маленькие."""
+    ms = ollama_models()
+    size = {m["name"]: m.get("size", 0) for m in ms}
+    names = sorted(size, key=size.get)
+    if tier == "code":
+        names.sort(key=lambda n: ("coder" not in n.lower(), -size[n]))
+    elif tier == "deep":
+        names.reverse()
+    return names
+
+
 def model_candidates(name: str, tier: str) -> list[str]:
     """Модели провайдера для уровня задачи по убыванию предпочтения (каталог route_models важнее таблицы)."""
     over = load_catalog().get("route_models", {}).get(name, {}).get(tier)
     items = over if isinstance(over, list) else ([over] if over else [])
-    return list(dict.fromkeys(items + PROVIDERS[name]["models"][tier]))
+    found = _ollama_order(tier) if name == "ollama" else []
+    return list(dict.fromkeys(items + found + PROVIDERS[name]["models"][tier]))
 
 
 def _model_list(name: str, cfg: dict | None = None) -> set[str] | None:
     """Модели, которые провайдер отдаёт сейчас (GET /models, кэш на сутки). None — узнать не удалось."""
-    if PROVIDERS[name]["kind"] != "openai" or name == "local":
+    if PROVIDERS[name]["kind"] != "openai" or not PROVIDERS[name]["env"]:
         return None
     path = CACHE_DIR / f"models-{name}.json"
     try:
@@ -328,6 +368,9 @@ def available_providers(cfg: dict | None = None, *, check_local: bool = True) ->
     for name in PROVIDERS:
         if name == "local":
             if check_local and backend_state() != "missing":
+                out.append(name)
+        elif name == "ollama":
+            if check_local and ollama_models():
                 out.append(name)
         elif provider_key(name, cfg):
             out.append(name)

@@ -3,10 +3,12 @@
 
     pythonw launch-studio.py                     окно Mind Studio (так запускает ярлык Mind)
     python  launch-studio.py --link-antigravity  мост к Antigravity — выполнить в терминале Antigravity
+    python  launch-studio.py --install-antigravity-autostart  Antigravity сам запускает мост при каждом старте
     python  launch-studio.py --server            только сервер, адрес в консоль
 
 Ошибки старта при запуске без консоли показываются окном и пишутся в studio-launch.log.
 """
+import json
 import os
 import sys
 import traceback
@@ -26,6 +28,8 @@ if py.name.lower() == "pythonw.exe":
     py = py.with_name("python.exe")
 os.environ.setdefault("AISKTAG_STUDIO_LINK_CMD", f'& "{py}" "{Path(__file__).resolve()}" --link-antigravity'
                       if sys.platform == "win32" else f'"{py}" "{Path(__file__).resolve()}" --link-antigravity')
+
+os.environ.setdefault("AISKTAG_STUDIO_SELF", json.dumps([str(py), str(Path(__file__).resolve())]))
 
 if sys.platform == "win32":
     try:

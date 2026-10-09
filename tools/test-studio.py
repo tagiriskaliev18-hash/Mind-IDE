@@ -26,7 +26,8 @@ if SHOTS:
 
 os.environ.update({"XDG_CONFIG_HOME": str(TMP / "conf"), "XDG_CACHE_HOME": str(TMP / "cache"),
                    "AISKTAG_CATALOG": str(ROOT / "overlay/usr/share/aisktagos/ai/models.json"),
-                   "ANTIGRAVITY_DATA": str(TMP / "agy"), "AISKTAG_SKILLS": str(TMP / "skills")})
+                   "ANTIGRAVITY_DATA": str(TMP / "agy"), "AISKTAG_SKILLS": str(TMP / "skills"),
+                   "OLLAMA_HOST": "127.0.0.1:9"})
 for k in list(os.environ):
     if k.endswith("_API_KEY"):
         del os.environ[k]
@@ -226,6 +227,29 @@ class StudioAPI(unittest.TestCase):
             call("chats/../../etc")
         with self.assertRaises(urllib.error.HTTPError):
             call("antigravity/conversation/..%2F..%2Fx")
+
+    def test_antigravity_autostart_keeps_other_servers(self):
+        antigravity.MCP_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+        antigravity.MCP_CONFIG.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}}), encoding="utf-8")
+        self.assertFalse(json.load(call("state"))["status"]["antigravity"]["autostart"])
+        self.assertTrue(json.load(call("antigravity/autostart", {}))["ok"])
+        cfg = json.loads(antigravity.MCP_CONFIG.read_text(encoding="utf-8"))["mcpServers"]
+        self.assertEqual(cfg["other"], {"command": "x"})
+        self.assertEqual(cfg["mind-studio-link"]["args"][-2:], ["--link-antigravity", "--mcp"])
+        self.assertTrue(json.load(call("state"))["status"]["antigravity"]["autostart"])
+
+    def test_antigravity_mcp_handshake(self):
+        import subprocess
+        env = {k: v for k, v in os.environ.items() if not k.startswith("ANTIGRAVITY_") or k == "ANTIGRAVITY_DATA"}
+        msgs = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
+                {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}]
+        out = subprocess.run([sys.executable, str(ROOT / "launch-studio.py"), "--link-antigravity", "--mcp"],
+                             input="".join(json.dumps(m) + "\n" for m in msgs), capture_output=True, text=True,
+                             env=env, timeout=30).stdout
+        replies = [json.loads(line) for line in out.splitlines()]
+        self.assertEqual(replies[0]["result"]["serverInfo"]["name"], "mind-studio-link")
+        self.assertEqual(replies[1]["result"]["tools"][0]["name"], "mind_studio_link_status")
 
 
 class StudioUI(unittest.TestCase):

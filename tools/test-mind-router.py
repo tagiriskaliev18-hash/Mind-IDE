@@ -22,6 +22,7 @@ TMP = tempfile.mkdtemp(prefix="mind-test-")
 os.environ["XDG_CONFIG_HOME"] = str(Path(TMP) / "conf")
 os.environ["XDG_CACHE_HOME"] = str(Path(TMP) / "cache")
 os.environ["AISKTAG_CATALOG"] = str(ROOT / "overlay/usr/share/aisktagos/ai/models.json")
+os.environ["OLLAMA_HOST"] = "127.0.0.1:9"   # настоящий Ollama этого ПК в тестах не участвует
 for k in list(os.environ):
     if k.endswith(("_API_KEY",)) or k in ("AI_PROVIDER", "AI_BASE_URL", "AI_MODEL", "AI_API_KEY"):
         del os.environ[k]

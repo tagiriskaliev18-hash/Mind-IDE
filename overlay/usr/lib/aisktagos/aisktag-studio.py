@@ -3,10 +3,12 @@
 
     aisktag-studio                     открыть окно
     aisktag-studio --link-antigravity  запустить мост к Antigravity (выполнять в терминале Antigravity)
+    aisktag-studio --install-antigravity-autostart  Antigravity сам запускает мост при каждом старте
     aisktag-studio --server            только сервер; адрес печатается в консоль (для браузера и отладки)
 
 Окно — Qt WebEngine; если его нет, интерфейс откроется в Chrome/Edge/Chromium в режиме приложения.
 """
+import json
 import os
 import shutil
 import subprocess
@@ -77,7 +79,12 @@ def main() -> int:
     args = sys.argv[1:]
     from mind_studio import antigravity, server
     if "--link-antigravity" in args:
-        return antigravity.serve_link()
+        return antigravity.serve_link(mcp="--mcp" in args)
+    if "--install-antigravity-autostart" in args:
+        cmd = json.loads(os.environ.get("AISKTAG_STUDIO_SELF") or '["aisktag-studio"]')
+        path = antigravity.install_autostart(cmd + ["--link-antigravity", "--mcp"])
+        print(f"Готово: мост добавлен в {path}. Перезапустите Antigravity — дальше мост поднимается сам.")
+        return 0
     srv = server.start()
     url = server.url(srv)
     if "--server" in args:
