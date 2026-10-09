@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# AIsktagOS: запуск llama-server с параметрами под конкретный компьютер.
+# Вызывается службой aisktag-llm-backend.service (порядок: выбрать модель → движок → контекст → потоки).
+set -euo pipefail
+
+CONF=/etc/aisktagos/ai.conf
+# shellcheck disable=SC1090
+[ -r "$CONF" ] && { set -a; . "$CONF"; set +a; }
+AI_MODEL="${AI_MODEL:-lite}"
+AI_BACKEND="${AI_BACKEND:-auto}"
+AI_CTX="${AI_CTX:-auto}"
+AI_THREADS="${AI_THREADS:-auto}"
+AI_EXTRA_ARGS="${AI_EXTRA_ARGS:-}"
+
+CATALOG=/usr/share/aisktagos/ai/models.json
+LLAMA=/opt/aisktagos/ai/llama
+PORT="${AI_BACKEND_PORT:-6574}"
+
+die() { echo "aisktag-llm: $*" >&2; exit 1; }
+
+# 1. Файл модели: полный путь или id из каталога (сначала установленные, потом встроенные в образ)
+ctx_default=8192
+case "$AI_MODEL" in
+    /*) model="$AI_MODEL" ;;
+    *)
+        file="$(jq -r --arg id "$AI_MODEL" '.models[] | select(.id == $id) | .file' "$CATALOG")"
+        [ -n "$file" ] || die "модель «$AI_MODEL» не найдена в каталоге"
+        ctx_default="$(jq -r --arg id "$AI_MODEL" '.models[] | select(.id == $id) | .ctx' "$CATALOG")"
+        model=""
+        for dir in /var/lib/aisktagos/ai/models /usr/share/aisktagos/ai/models; do
+            if [ -f "$dir/$file" ]; then model="$dir/$file"; break; fi
+        done
+        [ -n "$model" ] || die "файл модели «$file» не установлен: выполните «ai model install $AI_MODEL»"
+        ;;
+esac
+[ -r "$model" ] || die "нет доступа к файлу модели: $model"
+
+# 2. Движок: Vulkan только на настоящей видеокарте (программный llvmpipe медленнее процессора)
+pick_backend() {
+    case "$AI_BACKEND" in cpu | vulkan) echo "$AI_BACKEND"; return ;; esac
+    [ -x "$LLAMA/vulkan/llama-server" ] || { echo cpu; return; }
+    compgen -G '/dev/dri/renderD*' >/dev/null || { echo cpu; return; }
+    if LD_LIBRARY_PATH="$LLAMA/vulkan" "$LLAMA/vulkan/llama-server" --list-devices 2>&1 \
+        | grep -i 'vulkan[0-9]*:' | grep -viE 'llvmpipe|lavapipe|swiftshader' | grep -q .; then
+        echo vulkan
+    else
+        echo cpu
+    fi
+}
+backend="$(pick_backend)"
+bin="$LLAMA/$backend/llama-server"
+[ -x "$bin" ] || die "не найден движок $bin"
+
+# 3. Контекст: по модели, но не больше, чем позволяет свободная память
+mem_mb="$(awk '/MemAvailable/ { print int($2 / 1024) }' /proc/meminfo)"
+if [ "$AI_CTX" = auto ]; then
+    ctx="$ctx_default"
+    if [ "$mem_mb" -lt 3000 ]; then
+        ctx=2048
+    elif [ "$mem_mb" -lt 4500 ] && [ "$ctx" -gt 4096 ]; then
+        ctx=4096
+    fi
+else
+    ctx="$AI_CTX"
+fi
+
+# 4. Потоки: физические ядра (гиперпоточность llama.cpp почти не ускоряет)
+if [ "$AI_THREADS" = auto ]; then
+    threads="$(lscpu -p=CORE,SOCKET 2>/dev/null | grep -v '^#' | sort -u | wc -l)"
+    [ "$threads" -ge 1 ] || threads="$(nproc)"
+else
+    threads="$AI_THREADS"
+fi
+
+echo "aisktag-llm: модель=$model движок=$backend контекст=$ctx потоки=$threads память=${mem_mb}МБ" >&2
+export LD_LIBRARY_PATH="$LLAMA/$backend${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# shellcheck disable=SC2086
+exec "$bin" -m "$model" --alias aisktag-mind --host 127.0.0.1 --port "$PORT" \
+    -c "$ctx" -t "$threads" --cache-ram 512 --flash-attn auto $AI_EXTRA_ARGS

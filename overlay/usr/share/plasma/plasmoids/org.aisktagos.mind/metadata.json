@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Id": "org.aisktagos.mind",
+        "Name": "Mind AI",
+        "Description": "AIsktag Mind Status and Dev HUD",
+        "Icon": "aisktagos-logo",
+        "Category": "System Information",
+        "Version": "1.0",
+        "License": "GPL"
+    },
+    "X-Plasma-API": "declarativeappletscript",
+    "X-Plasma-MainScript": "ui/main.qml"
+}

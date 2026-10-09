@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.1
+Type=Application
+Name=Mind
+Name[ru]=Mind — ИИ-ассистент
+Comment=Встроенный ИИ-ассистент AIsktagOS
+Icon=aisktagos-mind
+Exec=aisktag-mind
+Terminal=false
+StartupNotify=true

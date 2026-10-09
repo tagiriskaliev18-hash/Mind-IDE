@@ -1,0 +1,272 @@
+{
+  "_comment": "models — локальные GGUF-модели (их читают aisktag-llm-run, aisktag-ai-model и сборка). cloud — облачные модели для справки и меню Mind; ключи API не хранятся здесь никогда.",
+  "default": "lite",
+  "models": [
+    {
+      "id": "lite",
+      "name": "Qwen2.5-Coder 1.5B",
+      "title": "Лёгкая (встроена в образ)",
+      "description": "Быстрая модель для кода и коротких вопросов. Работает на любом ПК от 4 ГБ памяти, даже без видеокарты.",
+      "file": "qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
+      "sha256": "cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046",
+      "size_mb": 1120,
+      "ram_mb": 3500,
+      "ctx": 8192,
+      "license": "Apache-2.0",
+      "bundled": true,
+      "provider": "local",
+      "tag": "local"
+    },
+    {
+      "id": "standard",
+      "name": "Qwen3 4B Instruct",
+      "title": "Стандартная",
+      "description": "Умнее и лучше говорит по-русски: ответы на вопросы, код, тексты. Рекомендуется при 8 ГБ памяти.",
+      "file": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+      "url": "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+      "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+      "size_mb": 2500,
+      "ram_mb": 6500,
+      "ctx": 16384,
+      "license": "Apache-2.0",
+      "bundled": false,
+      "provider": "local",
+      "tag": "local"
+    },
+    {
+      "id": "pro",
+      "name": "Qwen2.5-Coder 7B",
+      "title": "Профессиональная",
+      "description": "Сильная модель для программирования: рефакторинг, ревью, тесты. Нужно 16 ГБ памяти или видеокарта с 8 ГБ.",
+      "file": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+      "sha256": "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+      "size_mb": 4680,
+      "ram_mb": 11000,
+      "ctx": 16384,
+      "license": "Apache-2.0",
+      "bundled": false,
+      "provider": "local",
+      "tag": "local"
+    }
+  ],
+  "cloud": [
+    {
+      "id": "nvidia_codestral_22b",
+      "name": "Codestral 22B",
+      "title": "Codestral 22B · NVIDIA",
+      "description": "Лучшая модель Mistral для кода: fill-in-the-middle, автодополнение, 80+ языков. Лидер в бенчмарках кодинга.",
+      "model_id": "mistralai/codestral-22b-v0-1",
+      "params_b": 22,
+      "ctx": 32768,
+      "license": "Apache-2.0",
+      "bundled": false,
+      "provider": "nvidia",
+      "tag": "coding",
+      "best_for": [
+        "code",
+        "autocomplete"
+      ]
+    },
+    {
+      "id": "nvidia_qwen_coder_32b",
+      "name": "Qwen2.5 Coder 32B",
+      "title": "Qwen2.5 Coder 32B · NVIDIA",
+      "description": "Топовый открытый кодер от Alibaba: превосходит GPT-4o в большинстве задач программирования. 32B параметров.",
+      "model_id": "qwen/qwen2.5-coder-32b-instruct",
+      "params_b": 32,
+      "ctx": 131072,
+      "license": "Apache-2.0",
+      "bundled": false,
+      "provider": "nvidia",
+      "tag": "coding",
+      "best_for": [
+        "code",
+        "review",
+        "refactor"
+      ]
+    },
+    {
+      "id": "nvidia_llama_70b",
+      "name": "Llama 3.1 70B Instruct",
+      "title": "Llama 3.1 70B · NVIDIA",
+      "description": "Meta's лучшая открытая модель общего назначения: отлично пишет код, объясняет, анализирует. 70 миллиардов параметров.",
+      "model_id": "meta/llama-3.1-70b-instruct",
+      "params_b": 70,
+      "ctx": 131072,
+      "license": "Llama-3.1",
+      "bundled": false,
+      "provider": "nvidia",
+      "tag": "general",
+      "best_for": [
+        "code",
+        "design",
+        "explain"
+      ]
+    },
+    {
+      "id": "nvidia_nemotron_70b",
+      "name": "Llama-3.1-Nemotron 70B",
+      "title": "Nemotron 70B · NVIDIA",
+      "description": "NVIDIA-дообученный Llama для задач разработки: превосходит GPT-4o в рассуждениях и коде. Лучшая открытая модель для кодинга.",
+      "model_id": "nvidia/llama-3.1-nemotron-70b-instruct",
+      "params_b": 70,
+      "ctx": 131072,
+      "license": "Llama-3.1",
+      "bundled": false,
+      "provider": "nvidia",
+      "tag": "coding",
+      "best_for": [
+        "code",
+        "reasoning",
+        "review"
+      ]
+    },
+    {
+      "id": "nvidia_nemotron_ultra_253b",
+      "name": "Nemotron Ultra 253B",
+      "title": "Nemotron Ultra 253B · NVIDIA",
+      "description": "NVIDIA-флагман для reasoning: 253 миллиарда параметров, лидер в сложных задачах кодинга, математике и дизайне архитектур. Топ-1 среди открытых моделей.",
+      "model_id": "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+      "params_b": 253,
+      "ctx": 131072,
+      "license": "Llama-3.1",
+      "bundled": false,
+      "provider": "nvidia",
+      "tag": "flagship",
+      "best_for": [
+        "code",
+        "architecture",
+        "design",
+        "reasoning"
+      ]
+    },
+    {
+      "id": "nvidia_llama_405b",
+      "name": "Llama 3.1 405B Instruct",
+      "title": "Llama 3.1 405B · NVIDIA",
+      "description": "Крупнейшая открытая модель Meta: 405 миллиардов параметров. Сопоставима с GPT-4 по качеству, превосходит в длинном контексте. Идеальна для архитектурных решений и UI/UX.",
+      "model_id": "meta/llama-3.1-405b-instruct",
+      "params_b": 405,
+      "ctx": 131072,
+      "license": "Llama-3.1",
+      "bundled": false,
+      "provider": "nvidia",
+      "tag": "flagship",
+      "best_for": [
+        "code",
+        "design",
+        "architecture",
+        "explain"
+      ]
+    },
+    {
+      "id": "nvidia_deepseek_r1_671b",
+      "name": "DeepSeek R1 671B",
+      "title": "DeepSeek R1 671B · NVIDIA",
+      "description": "Самая большая модель в каталоге: 671 МИЛЛИАРД параметров. Reasoning-модель уровня o1/o3: решает сложнейшие задачи кодинга, алгоритмы, архитектуру систем. Лидер в мировых бенчмарках.",
+      "model_id": "deepseek-ai/deepseek-r1",
+      "params_b": 671,
+      "ctx": 64000,
+      "license": "MIT",
+      "bundled": false,
+      "provider": "nvidia",
+      "tag": "flagship",
+      "best_for": [
+        "code",
+        "reasoning",
+        "algorithms",
+        "architecture"
+      ]
+    },
+    {
+      "id": "nvidia_mixtral_8x22b",
+      "name": "Mixtral 8×22B",
+      "title": "Mixtral 8×22B · NVIDIA",
+      "description": "MoE-архитектура: 8 экспертов по 22B, активно ~39B. Быстрый, дешёвый, отлично пишет код и UI-тексты.",
+      "model_id": "mistralai/mixtral-8x22b-instruct-v0.1",
+      "params_b": 141,
+      "ctx": 65536,
+      "license": "Apache-2.0",
+      "bundled": false,
+      "provider": "nvidia",
+      "tag": "general",
+      "best_for": [
+        "code",
+        "content",
+        "design"
+      ]
+    },
+    {
+      "id": "nvidia_phi4_multimodal",
+      "name": "Phi-4 Multimodal",
+      "title": "Phi-4 Multimodal · NVIDIA",
+      "description": "Microsoft Phi-4 с поддержкой изображений: анализирует скриншоты UI, описывает дизайн, пишет код по макету. Идеальна для дизайн-задач.",
+      "model_id": "microsoft/phi-4-multimodal-instruct",
+      "params_b": 14,
+      "ctx": 16384,
+      "license": "MIT",
+      "bundled": false,
+      "provider": "nvidia",
+      "tag": "design",
+      "best_for": [
+        "design",
+        "vision",
+        "ui-analysis"
+      ]
+    },
+    {
+      "id": "claude_opus",
+      "name": "Claude Opus 5.5",
+      "title": "Claude Opus · Anthropic",
+      "description": "Флагман Anthropic: лучший в глубоком понимании кода, архитектурных решениях и творческих задачах. 200k токенов контекста.",
+      "model_id": "claude-opus-5-5",
+      "ctx": 200000,
+      "license": "Proprietary",
+      "bundled": false,
+      "provider": "claude",
+      "tag": "flagship",
+      "best_for": [
+        "code",
+        "architecture",
+        "design",
+        "writing"
+      ]
+    },
+    {
+      "id": "claude_sonnet",
+      "name": "Claude Sonnet 5.5",
+      "title": "Claude Sonnet · Anthropic",
+      "description": "Лучший баланс скорости и качества от Anthropic. Рекомендуется для большинства задач кодинга и дизайна.",
+      "model_id": "claude-sonnet-5-5",
+      "ctx": 200000,
+      "license": "Proprietary",
+      "bundled": false,
+      "provider": "claude",
+      "tag": "recommended",
+      "best_for": [
+        "code",
+        "design",
+        "explain"
+      ]
+    },
+    {
+      "id": "claude_haiku",
+      "name": "Claude Haiku 5.5",
+      "title": "Claude Haiku · Anthropic",
+      "description": "Молниеносный Claude: быстрые правки, автодополнение, короткие вопросы. Самый доступный из Claude.",
+      "model_id": "claude-haiku-5-5",
+      "ctx": 200000,
+      "license": "Proprietary",
+      "bundled": false,
+      "provider": "claude",
+      "tag": "fast",
+      "best_for": [
+        "autocomplete",
+        "quick-fix",
+        "explain"
+      ]
+    }
+  ]
+}

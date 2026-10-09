@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Ждёт, пока llama-server загрузит модель (/health отдаёт 503 «Loading model», затем 200).
+# Благодаря этому прокси начинает принимать запросы только когда модель готова,
+# а клиенты просто ждут в очереди сокета.
+PORT="${AI_BACKEND_PORT:-6574}"
+for _ in $(seq 1 280); do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://127.0.0.1:$PORT/health" || true)"
+    [ "$code" = 200 ] && exit 0
+    sleep 1
+done
+echo "aisktag-llm: модель не загрузилась за 280 секунд" >&2
+exit 1

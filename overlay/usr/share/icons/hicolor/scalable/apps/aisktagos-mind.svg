@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="22" fill="#0d1b4d"/>
+  <circle cx="50" cy="50" r="28" fill="none" stroke="#9B5DE5" stroke-width="2" opacity="0.9"/>
+  <circle cx="50" cy="50" r="18" fill="none" stroke="#00F5FF" stroke-width="1.5" opacity="0.8"/>
+  <!-- Узлы нейросети -->
+  <circle cx="50" cy="36" r="3" fill="#9B5DE5"/>
+  <circle cx="64" cy="50" r="3" fill="#7b40d4"/>
+  <circle cx="56" cy="63" r="3" fill="#5b9ddc"/>
+  <circle cx="40" cy="60" r="3" fill="#2ed3e0"/>
+  <circle cx="36" cy="46" r="3" fill="#00F5FF"/>
+  <!-- Рёбра нейросети -->
+  <line x1="50" y1="36" x2="64" y2="50" stroke="#9B5DE5" stroke-width="1.2" opacity="0.7"/>
+  <line x1="64" y1="50" x2="56" y2="63" stroke="#7b40d4" stroke-width="1.2" opacity="0.7"/>
+  <line x1="56" y1="63" x2="40" y2="60" stroke="#3abfe8" stroke-width="1.2" opacity="0.7"/>
+  <line x1="40" y1="60" x2="36" y2="46" stroke="#00F5FF" stroke-width="1.2" opacity="0.7"/>
+  <line x1="36" y1="46" x2="50" y2="36" stroke="#8ad0f5" stroke-width="1.2" opacity="0.7"/>
+  <line x1="50" y1="36" x2="56" y2="63" stroke="#9B5DE5" stroke-width="0.8" opacity="0.5"/>
+  <line x1="64" y1="50" x2="40" y2="60" stroke="#00F5FF" stroke-width="0.8" opacity="0.5"/>
+  <line x1="50" y1="36" x2="40" y2="60" stroke="#7b40d4" stroke-width="0.8" opacity="0.4"/>
+  <!-- Сияние в центре -->
+  <circle cx="50" cy="50" r="5" fill="#9B5DE5" opacity="0.6"/>
+  <circle cx="50" cy="50" r="2.5" fill="#ffffff" opacity="0.85"/>
+</svg>

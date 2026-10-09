@@ -1,0 +1,27 @@
+[Desktop Entry]
+Version=1.1
+Type=Application
+Name=Mind
+Name[ru]=Mind — ИИ-ассистент
+GenericName=AI Assistant
+GenericName[ru]=ИИ-ассистент
+Comment=Встроенный ИИ-ассистент AIsktagOS: чат, код, объяснения
+Comment[ru]=Встроенный ИИ-ассистент AIsktagOS: чат, код, объяснения
+Exec=aisktag-mind
+Icon=aisktagos-mind
+Terminal=false
+StartupNotify=true
+StartupWMClass=aisktag-mind
+Categories=Development;Education;Utility;
+Keywords=ИИ;AI;чат;код;ассистент;mind;
+Actions=NewChat;AskFromClipboard;
+
+[Desktop Action NewChat]
+Name=Новый чат
+Name[ru]=Новый чат
+Exec=aisktag-mind --new
+
+[Desktop Action AskFromClipboard]
+Name=Спросить из буфера обмена
+Name[ru]=Спросить из буфера обмена
+Exec=aisktag-mind --clipboard

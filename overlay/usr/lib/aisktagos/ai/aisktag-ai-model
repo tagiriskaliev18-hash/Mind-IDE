@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""Менеджер моделей Mind (запускается от root через pkexec; polkit-действие org.aisktagos.ai.model).
+
+    aisktag-ai-model list                 — JSON: каталог + что установлено + активная модель
+    aisktag-ai-model install <id>         — скачать модель из каталога (докачка, проверка SHA-256)
+    aisktag-ai-model use <id|путь.gguf>   — сделать модель активной и перезапустить сервер
+    aisktag-ai-model remove <id>          — удалить скачанную модель (встроенную удалить нельзя)
+
+Безопасность: URL и имена файлов берутся только из каталога /usr/share/aisktagos/ai/models.json,
+произвольных адресов и путей установка не принимает; каждый файл проверяется по SHA-256.
+Прогресс печатается строками «PROGRESS <процент>», их читает Центр AIsktagOS.
+"""
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import urllib.request
+from pathlib import Path
+
+CATALOG = Path("/usr/share/aisktagos/ai/models.json")
+CONF = Path("/etc/aisktagos/ai.conf")
+BUNDLED_DIR = Path("/usr/share/aisktagos/ai/models")
+USER_DIR = Path("/var/lib/aisktagos/ai/models")
+
+
+def load_catalog() -> dict:
+    return json.loads(CATALOG.read_text(encoding="utf-8"))
+
+
+def find(cat: dict, mid: str) -> dict:
+    for m in cat["models"]:
+        if m["id"] == mid:
+            return m
+    sys.exit(f"Модели «{mid}» нет в каталоге")
+
+
+def installed_path(m: dict) -> Path | None:
+    for d in (USER_DIR, BUNDLED_DIR):
+        p = d / m["file"]
+        if p.is_file():
+            return p
+    return None
+
+
+def active_model() -> str:
+    try:
+        for line in CONF.read_text(encoding="utf-8").splitlines():
+            if line.startswith("AI_MODEL="):
+                return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return "lite"
+
+
+def cmd_list() -> None:
+    cat = load_catalog()
+    out = []
+    for m in cat["models"]:
+        p = installed_path(m)
+        out.append({**m, "installed": p is not None, "path": str(p) if p else None})
+    print(json.dumps({"active": active_model(), "models": out}, ensure_ascii=False))
+
+
+def sha256_of(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def cmd_install(mid: str) -> None:
+    m = find(load_catalog(), mid)
+    if installed_path(m):
+        print(f"Модель «{m['name']}» уже установлена")
+        return
+    if not re.fullmatch(r"[A-Za-z0-9._-]+\.gguf", m["file"]):
+        sys.exit("Недопустимое имя файла в каталоге")
+    USER_DIR.mkdir(parents=True, exist_ok=True)
+    os.chmod(USER_DIR, 0o755)
+    need = int(m["size_mb"] * 1.1) * 1024 * 1024
+    if shutil.disk_usage(USER_DIR).free < need:
+        sys.exit(f"Недостаточно места на диске: нужно около {need // 1048576} МБ")
+
+    part = USER_DIR / (m["file"] + ".part")
+    done = part.stat().st_size if part.exists() else 0
+    req = urllib.request.Request(m["url"], headers={"User-Agent": "aisktagos-ai/1.0"})
+    if done:
+        req.add_header("Range", f"bytes={done}-")
+    print(f"Скачиваю «{m['name']}» (~{m['size_mb']} МБ)…", flush=True)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        if done and r.status != 206:      # сервер не поддержал докачку: начинаем заново
+            done = 0
+        total = done + int(r.headers.get("Content-Length") or 0)
+        last = -1
+        with part.open("ab" if done else "wb") as f:
+            while chunk := r.read(1 << 20):
+                f.write(chunk)
+                done += len(chunk)
+                pct = int(done * 100 / total) if total else 0
+                if pct != last:
+                    last = pct
+                    print(f"PROGRESS {pct}", flush=True)
+    print("Проверяю контрольную сумму…", flush=True)
+    if sha256_of(part) != m["sha256"]:
+        part.unlink(missing_ok=True)
+        sys.exit("Контрольная сумма не совпала: файл повреждён и удалён. Повторите установку.")
+    os.chmod(part, 0o644)
+    part.rename(USER_DIR / m["file"])
+    print(f"Готово: модель «{m['name']}» установлена", flush=True)
+
+
+def set_conf(key: str, value: str) -> None:
+    lines = CONF.read_text(encoding="utf-8").splitlines() if CONF.exists() else []
+    for i, line in enumerate(lines):
+        if line.startswith(key + "="):
+            lines[i] = f"{key}={value}"
+            break
+    else:
+        lines.append(f"{key}={value}")
+    CONF.parent.mkdir(parents=True, exist_ok=True)
+    CONF.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def cmd_use(target: str) -> None:
+    if target.startswith("/"):
+        if not target.endswith(".gguf") or not Path(target).is_file():
+            sys.exit("Нужен существующий файл .gguf")
+        value = target
+    else:
+        m = find(load_catalog(), target)
+        if not installed_path(m):
+            sys.exit(f"Модель «{target}» не установлена: сначала «install {target}»")
+        value = m["id"]
+    set_conf("AI_MODEL", value)
+    # Сервер перезапустится при следующем запросе; если он сейчас работает — перезапускаем
+    subprocess.run(["systemctl", "try-restart", "aisktag-llm-backend.service"], check=False)
+    print(f"Активная модель: {value}")
+
+
+def cmd_remove(mid: str) -> None:
+    m = find(load_catalog(), mid)
+    p = USER_DIR / m["file"]
+    if not p.exists():
+        sys.exit("Эта модель не была скачана (встроенную в образ удалить нельзя)")
+    if active_model() == mid:
+        sys.exit("Нельзя удалить активную модель: сначала выберите другую")
+    p.unlink()
+    print(f"Удалено: {m['name']}")
+
+
+def main() -> None:
+    a = sys.argv[1:]
+    if os.geteuid() != 0 and a[:1] != ["list"]:
+        sys.exit("Запускайте через pkexec или sudo")
+    if a[:1] == ["list"]:
+        cmd_list()
+    elif a[:1] == ["install"] and len(a) == 2:
+        cmd_install(a[1])
+    elif a[:1] == ["use"] and len(a) == 2:
+        cmd_use(a[1])
+    elif a[:1] == ["remove"] and len(a) == 2:
+        cmd_remove(a[1])
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()

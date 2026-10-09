@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.1
+Type=Application
+Name=Mind Studio
+Comment=Ваши модели, Claude и Antigravity в одном разговоре
+Icon=aisktagos-mind
+Exec=aisktag-studio
+Terminal=false
+StartupNotify=true
