@@ -16,7 +16,7 @@ from urllib.parse import unquote, urlparse
 
 import aisktag_ai as ai
 
-from . import agents, antigravity, store
+from . import agents, antigravity, continuity, store
 
 WEB = Path(__file__).resolve().parent / "web"
 TOKEN = secrets.token_urlsafe(24)
@@ -45,6 +45,7 @@ def _state() -> dict:
         "projects": store.projects(),
         "agy_models": [{"id": k, "name": v} for k, v in antigravity.MODELS.items()],
         "link_command": os.environ.get("AISKTAG_STUDIO_LINK_CMD", "aisktag-studio --link-antigravity"),
+        "continuity": continuity.available(),
     }
 
 
@@ -228,6 +229,7 @@ class Handler(BaseHTTPRequestHandler):
             if parts == ["state"]:
                 return self._json(_state())
             if parts == ["chats"]:
+                continuity.import_incoming()
                 return self._json(store.list_chats())
             if len(parts) == 2 and parts[0] == "chats":
                 return self._json(store.get_chat(parts[1]))
@@ -279,6 +281,14 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["cache", "clear"]:
             ai.reset_cooldowns()
             return self._json({"cleared": ai.clear_cache()})
+        if len(parts) == 3 and parts[0] == "chats" and parts[2] == "handoff":
+            try:
+                res = continuity.send_chat(store.get_chat(parts[1]), to=req.get("to") or None)
+            except (KeyError, OSError):
+                return self._json({"error": "разговор не найден"}, 404)
+            except Exception as e:  # noqa: BLE001 — MindKit сообщает понятным текстом
+                return self._json({"error": str(e)}, 500)
+            return self._json({"devices": res})
         if len(parts) == 3 and parts[0] == "chats" and parts[2] == "stop":
             ev = _STOPS.get(parts[1])
             if ev:

@@ -145,6 +145,25 @@ PROVIDERS: dict[str, dict] = {
     },
 }
 
+
+def _keys_from_mindkit() -> None:
+    """Ключи из связки ключей Mind (MindKit, экосистема MindTagSystem) становятся переменными окружения.
+
+    Ключ, введённый один раз в связку (mindkit keychain set GROQ_API_KEY), видят Mind, шлюз AI Duo
+    и остальные программы. Уже заданные переменные окружения важнее. Без MindKit ничего не делает.
+    """
+    try:
+        from mindkit import keychain
+    except ImportError:
+        return
+    try:
+        keychain.load_env(sorted({env for p in PROVIDERS.values() for env in p["env"]}))
+    except Exception:  # noqa: BLE001 — связка недоступна (нет KWallet и т. п.): работаем без неё
+        pass
+
+
+_keys_from_mindkit()
+
 # Очередь по умолчанию: бесплатные и быстрые первыми, платные — только если больше некому ответить
 DEFAULT_ROUTE: dict[str, list[str]] = {
     "fast": ["local", "ollama", "groq", "gemini", "nvidia", "openrouter", "deepseek", "kimi", "openai", "claude"],
