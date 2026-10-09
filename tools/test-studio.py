@@ -31,6 +31,13 @@ os.environ.update({"XDG_CONFIG_HOME": str(TMP / "conf"), "XDG_CACHE_HOME": str(T
 for k in list(os.environ):
     if k.endswith("_API_KEY"):
         del os.environ[k]
+os.environ["MINDKIT_HOME"] = str(TMP / "mindkit")   # MindKit (если установлен) — в песочнице
+os.environ["MINDKIT_NOTIFY"] = "off"
+try:  # MindLink настроен: Mind Studio показывает кнопку Handoff
+    from mindkit import link as _mk_link
+    _mk_link.init_account()
+except ImportError:
+    pass
 sys.path.insert(0, str(ROOT / "overlay/usr/lib/aisktagos"))
 import aisktag_ai as ai  # noqa: E402
 
@@ -170,6 +177,29 @@ class StudioAPI(unittest.TestCase):
             call("state", token="wrong")
         self.assertEqual(cm.exception.code, 403)
 
+    def test_handoff_between_devices(self):
+        try:
+            from mindkit import link
+        except ImportError:
+            self.skipTest("MindKit не установлен")
+        from mind_studio import continuity
+        if continuity.link is None:
+            self.skipTest("MindKit не установлен")
+        # Разговор, пришедший с другого устройства по MindLink, появляется в списке сам
+        act = link.make_activity("chat", "План релиза", app="mind-studio",
+                                 chat={"title": "План релиза", "project": "P", "agent": "mind",
+                                       "messages": [{"role": "user", "content": "что дальше?"}]})
+        act["from"] = "Ноутбук"
+        link._store_activity(act)
+        chats = json.load(call("chats"))
+        got = [c for c in chats if c["title"] == "⇄ План релиза"]
+        self.assertEqual(len(got), 1)
+        self.assertEqual(json.load(call("chats/" + got[0]["id"]))["messages"][0]["content"], "что дальше?")
+        self.assertEqual(len([c for c in json.load(call("chats")) if c["title"] == "⇄ План релиза"]), 1,
+                         "повторно не импортируется")
+        # Отправка: без известных устройств доставлять некуда, но ошибки нет
+        self.assertEqual(json.load(call(f"chats/{got[0]['id']}/handoff", {}))["devices"], {})
+
     def test_state(self):
         st = json.load(call("state"))
         self.assertTrue(st["status"]["mind"]["ready"])
@@ -260,7 +290,10 @@ class StudioUI(unittest.TestCase):
         except ImportError:
             raise unittest.SkipTest("Playwright не установлен")
         cls.pw = sync_playwright().start()
-        for kw in ({"channel": "msedge"}, {"channel": "chrome"}, {}):
+        tries = [{"channel": "msedge"}, {"channel": "chrome"}, {}]
+        if os.environ.get("CHROMIUM_PATH"):        # свой Chromium, если версия Playwright с ним не совпадает
+            tries.insert(0, {"executable_path": os.environ["CHROMIUM_PATH"]})
+        for kw in tries:
             try:
                 cls.browser = cls.pw.chromium.launch(**kw)
                 break
@@ -344,6 +377,18 @@ class StudioUI(unittest.TestCase):
         self.assertIn("--link-antigravity", p.locator("pre.howto").inner_text())
         self.assertIn("фоновом", p.locator("pre.howto").inner_text())
         self.shot("8-agents")
+
+    def test_8_handoff_button(self):
+        # Кнопка Handoff видна только когда MindLink настроен и в разговоре есть сообщения
+        p = self.page
+        st = json.load(call("state"))
+        p.locator("#recent .item, #projects .item").first.click()
+        p.wait_for_selector(".msg.assistant")
+        self.assertEqual(p.locator("#btn-handoff").is_visible(), bool(st["continuity"]))
+        if st["continuity"]:
+            p.click("#btn-handoff")
+            p.wait_for_function("document.querySelector('#toast').textContent.includes('устройств')")
+            self.shot("8-handoff")
 
     def test_9_no_js_errors(self):
         self.assertEqual(self.errors, [])

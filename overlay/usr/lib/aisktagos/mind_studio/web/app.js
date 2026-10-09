@@ -161,8 +161,20 @@ async function openAgy(id, title) {
 
 function agentMeta(id) { return S.state.agents.find((a) => a.id === id) || { title: id }; }
 
+async function handoff() {
+  if (!S.chat || !S.chat.id) return;
+  try {
+    const r = await api(`chats/${S.chat.id}/handoff`, { method: "POST", body: {} });
+    const names = Object.entries(r.devices || {});
+    if (!names.length) return toast("Нет известных устройств: запустите MindLink на них");
+    const ok = names.filter(([, v]) => v === "ok").map(([k]) => k);
+    toast(ok.length ? `Разговор отправлен: ${ok.join(", ")}` : `Не доставлено: ${names.map(([k, v]) => `${k} — ${v}`).join("; ")}`, 4000);
+  } catch (e) { toast("Handoff: " + e.message, 4000); }
+}
+
 function renderChat() {
   const c = S.chat;
+  $("#btn-handoff").classList.toggle("hidden", !(S.state.continuity && c.id && c.messages.length));
   crumbs([c.project || "Mind Studio", c.title]);
   const feed = $("#feed");
   if (!c.messages.length) { feed.innerHTML = hero(); bindHero(); }
@@ -558,6 +570,7 @@ async function init() {
   $("#btn-settings").onclick = () => openSettings();
   $("#settings-close").onclick = closeSettings;
   $("#settings").onclick = (e) => { if (e.target.id === "settings") closeSettings(); };
+  $("#btn-handoff").onclick = handoff;
   $("#btn-theme").onclick = () => { S.theme = S.theme === "dark" ? "light" : "dark"; applyTheme(); };
   $("#btn-toggle-side").onclick = () => $("#app").classList.toggle("side-hidden");
   $("#pick-agent").onclick = (e) => { e.stopPropagation(); agentMenu(); };
@@ -589,7 +602,7 @@ async function init() {
     if (e.key === "Escape") { closeMenu(); closeSettings(); }
   });
   $("#scroll").addEventListener("scroll", (e) => $(".main").classList.toggle("scrolled", e.target.scrollTop > 4));
-  setInterval(async () => { try { const st = S.state.status.antigravity.ready; await refreshState(); if (st !== S.state.status.antigravity.ready) loadAgy(); } catch (_) { /* сервер перезапускается */ } }, 15000);
+  setInterval(async () => { try { const st = S.state.status.antigravity.ready; await refreshState(); if (st !== S.state.status.antigravity.ready) loadAgy(); if (S.state.continuity) loadSide(); } catch (_) { /* сервер перезапускается */ } }, 15000);
 }
 
 init();

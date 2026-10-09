@@ -50,6 +50,20 @@ powershell -File tools\windows\Install-Mind-Shortcut.ps1   # ярлык Mind н�
 `%APPDATA%\aisktagos\ai.json` (на Linux `~/.config/aisktagos/ai.json`), поле `"keys": {"nvidia": "…"}`.
 Ключи никогда не хранятся в репозитории и не пишутся в журнал.
 
+Если установлен [MindKit](https://github.com/tagiriskaliev18-hash/MindTagSystem/blob/main/docs/MINDKIT.md), Mind берёт ключи и из
+**связки ключей Mind** (`mindkit keychain set GROQ_API_KEY`), общей для всех проектов экосистемы.
+
+## Handoff
+
+С MindKit в шапке Mind Studio появляется кнопка **«Продолжить на другом устройстве»**: разговор уходит по MindLink
+на другие свои устройства и там сам появляется в списке с пометкой «⇄».
+
+```powershell
+pip install "mindkit[full] @ git+https://github.com/tagiriskaliev18-hash/MindTagSystem"
+mindkit link init          # на первом устройстве; на остальных: mindkit link join КЛЮЧ
+mindkit link autostart on
+```
+
 ## Структура
 
 Раскладка файлов повторяет их место в AIsktagOS, поэтому код без изменений работает и в ОС, и отдельно:
