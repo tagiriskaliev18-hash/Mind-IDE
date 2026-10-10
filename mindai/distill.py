@@ -47,11 +47,13 @@ def teacher_reply(teacher: str, system: str, loop: list[dict]) -> str:
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("ANTHROPIC_", "CLAUDE_CODE_", "CLAUDE_AGENT_")) and k not in ("CLAUDECODE", "CLAUDE_PID")}
     model = teacher.split(":", 1)[1] if ":" in teacher else "sonnet"
-    # Учитель отвечает с системным промптом Mind и без инструментов: только текст ответа
-    r = subprocess.run([exe, "-p", prompt, "--model", model, "--output-format", "text", "--tools", "",
-                        "--system-prompt", system],
+    # Учитель отвечает с системным промптом Mind и без инструментов: только текст ответа. Хуки Claude Code
+    # выключены (с разрешения владельца, 2026-10-10), вход и остальные настройки — ваши: хук проверки правок
+    # перехватывал ответы учителя, хотя тот ничего не выполняет — действия выполняет песочница distill.py.
+    r = subprocess.run([exe, "-p", "--model", model, "--output-format", "text", "--tools", "",
+                        "--system-prompt", system, "--settings", '{"disableAllHooks": true}', "--strict-mcp-config"],
                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900, env=env,
-                       stdin=subprocess.DEVNULL)
+                       input=prompt)      # разговор через stdin: в командной строке Windows он не помещается
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout)[-400:])
     return r.stdout.strip()
@@ -110,6 +112,16 @@ def main() -> None:
     if args.limit:
         tasks = tasks[:args.limit]
     out = HERE / "data" / "distilled.jsonl"
+    done = set()
+    if out.exists():      # уже принятые задачи повторно не гоняем: прерванный сбор продолжается с места
+        for line in out.read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("ok") and r.get("teacher") == args.teacher:
+                done.add(r["prompt"])
+    tasks = [t for t in tasks if t["prompt"] not in done]
     ok = 0
     for t in tasks:
         try:
