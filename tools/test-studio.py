@@ -28,6 +28,10 @@ os.environ.update({"XDG_CONFIG_HOME": str(TMP / "conf"), "XDG_CACHE_HOME": str(T
                    "AISKTAG_CATALOG": str(ROOT / "overlay/usr/share/aisktagos/ai/models.json"),
                    "ANTIGRAVITY_DATA": str(TMP / "agy"), "AISKTAG_SKILLS": str(TMP / "skills"),
                    "OLLAMA_HOST": "127.0.0.1:9"})
+import socket  # noqa: E402
+with socket.socket() as _s:          # свободный порт для сервера «Mind на iPhone»
+    _s.bind(("127.0.0.1", 0))
+    os.environ["MIND_PHONE_PORT"] = str(_s.getsockname()[1])
 for k in list(os.environ):
     if k.endswith("_API_KEY"):
         del os.environ[k]
@@ -282,6 +286,51 @@ class StudioAPI(unittest.TestCase):
         self.assertEqual(replies[1]["result"]["tools"][0]["name"], "mind_studio_link_status")
 
 
+def phone_call(path, token, method="GET", body=None):
+    req = urllib.request.Request(f"http://127.0.0.1:{server.PHONE_PORT}/{path}", method=method,
+                                 data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"X-Studio-Token": token, "Content-Type": "application/json",
+                                          "Host": f"192.168.1.20:{server.PHONE_PORT}"})
+    return urllib.request.urlopen(req, timeout=30)
+
+
+class Phone(unittest.TestCase):
+    def test_phone_server(self):
+        self.assertFalse(json.load(call("phone"))["enabled"], "по умолчанию выключено")
+        ph = json.load(call("phone", {"enabled": True}))
+        self.assertTrue(ph["running"], ph)
+        tok = server.phone_token()
+        if ph["url"]:
+            self.assertTrue(ph["url"].endswith(f":{server.PHONE_PORT}/?k={tok}"), ph["url"])
+        # Интерфейс и значок отдаются телефону с любым Host, API — только с телефонным токеном
+        self.assertIn(b"apple-touch-icon", phone_call("", "").read())
+        r = phone_call("manifest.webmanifest", "")
+        self.assertIn("manifest+json", r.headers["Content-Type"])
+        self.assertEqual(json.load(r)["display"], "standalone")
+        self.assertIn("agents", json.load(phone_call("api/state", tok)))
+        for bad in ("", server.TOKEN, "wrong"):
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                phone_call("api/state", bad)
+            self.assertEqual(cm.exception.code, 403)
+        # Управлять доступом с самого телефона нельзя
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            phone_call("api/phone", tok, "POST", {"enabled": True, "reset_token": True})
+        self.assertEqual(cm.exception.code, 404)
+        # Токен переживает перезапуск (значок на экране «Домой»), смена — отключает старый
+        server._PHONE["token"] = ""
+        self.assertEqual(server.phone_token(), tok)
+        call("phone", {"enabled": True, "reset_token": True})
+        with self.assertRaises(urllib.error.HTTPError):
+            phone_call("api/state", tok)
+        self.assertIn("agents", json.load(phone_call("api/state", server.phone_token())))
+        # Выключение закрывает порт
+        self.assertFalse(json.load(call("phone", {"enabled": False}))["running"])
+        time.sleep(0.5)
+        with self.assertRaises(OSError):
+            phone_call("api/state", server.phone_token())
+        call("phone", {"enabled": True})
+
+
 class StudioUI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -390,7 +439,53 @@ class StudioUI(unittest.TestCase):
             p.wait_for_function("document.querySelector('#toast').textContent.includes('устройств')")
             self.shot("8-handoff")
 
-    def test_9_no_js_errors(self):
+    def test_90_phone_qr(self):
+        p = self.page
+        call("phone", {"enabled": True})
+        p.click("#btn-settings")
+        p.click("[data-tab=phone]")
+        p.wait_for_selector(".qr img")
+        self.shot("9-phone-qr")
+        p.keyboard.press("Escape")
+
+    def test_91_iphone(self):
+        call("phone", {"enabled": True})
+        ctx = self.browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2,
+                                       is_mobile=True, has_touch=True)
+        p = ctx.new_page()
+        p.on("pageerror", lambda e: self.errors.append(str(e)))
+        p.goto(f"http://127.0.0.1:{server.PHONE_PORT}/?k={server.phone_token()}")
+        p.wait_for_selector(".agent-card")
+        self.assertIn("?k=", p.url, "токен остаётся в адресе для значка «На экран Домой»")
+        side = p.locator("#sidebar")
+        self.assertLess(side.bounding_box()["x"] + side.bounding_box()["width"], 1, "шторка закрыта")
+        p.fill("#input", "Покажи пример кода")
+        p.keyboard.press("Enter")
+        p.wait_for_selector(".msg.assistant .code", timeout=20000)
+        p.wait_for_function("!document.querySelector('#btn-send').classList.contains('busy')")
+        self.assertLessEqual(p.evaluate("document.documentElement.scrollWidth"), 390, "нет прокрутки вбок")
+        if SHOTS:
+            p.wait_for_timeout(700)
+            p.screenshot(path=str(SHOTS / "10-iphone-chat.png"))
+        p.click("#btn-toggle-side")
+        p.wait_for_timeout(400)
+        self.assertGreaterEqual(side.bounding_box()["x"], 0)
+        if SHOTS:
+            p.screenshot(path=str(SHOTS / "11-iphone-menu.png"))
+        p.click("#btn-new")
+        p.wait_for_timeout(400)
+        self.assertLess(side.bounding_box()["x"] + side.bounding_box()["width"], 1, "после выбора шторка закрылась")
+        p.click("#btn-toggle-side")
+        p.wait_for_timeout(400)
+        p.click("#btn-settings")
+        p.wait_for_selector("#settings:not(.hidden)")
+        self.assertEqual(p.locator("[data-tab=phone]").count(), 0)
+        if SHOTS:
+            p.wait_for_timeout(500)
+            p.screenshot(path=str(SHOTS / "12-iphone-settings.png"))
+        ctx.close()
+
+    def test_99_no_js_errors(self):
         self.assertEqual(self.errors, [])
 
 

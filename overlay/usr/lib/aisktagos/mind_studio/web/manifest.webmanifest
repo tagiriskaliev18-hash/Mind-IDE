@@ -1,0 +1,13 @@
+{
+  "name": "Mind",
+  "short_name": "Mind",
+  "description": "Mind Studio на iPhone: ваши модели, Claude и Antigravity с компьютера",
+  "display": "standalone",
+  "background_color": "#0d1b4d",
+  "theme_color": "#0d1b4d",
+  "lang": "ru",
+  "icons": [
+    {"src": "icons/mind-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/mind-512.png", "sizes": "512x512", "type": "image/png"}
+  ]
+}
