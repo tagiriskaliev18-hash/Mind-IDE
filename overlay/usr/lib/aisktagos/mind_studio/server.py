@@ -122,7 +122,8 @@ def _run(chat: dict, req: dict, stop: threading.Event, emit) -> None:
     emit("chat", {"id": chat["id"], "title": chat["title"]})
 
     system = _system_prompt(chat, req)
-    history = [{"role": m["role"], "content": m["content"]} for m in chat["messages"][-24:]
+    # маркеры иконок Mind ([[mi:имя]]) нужны только интерфейсу — модели их не показываем
+    history = [{"role": m["role"], "content": mind_agent.strip_marks(m["content"])} for m in chat["messages"][-24:]
                if m["role"] in ("user", "assistant") and m.get("content")]
     settings = store.settings()
     opts = {"tier": None, "mode": "auto", "persona": req.get("persona") or "general",

@@ -9,19 +9,25 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (s) => MD.esc(String(s ?? ""));
 
+// Иконки Mind (MindKit): обводка с переливающимся фиолетово-синим градиентом, рисуются через CSS-mask (mind/mind-ui.css)
+const mi = (name, cls = "") => `<i class="mi mi-${name}${cls ? " " + cls : ""}" aria-hidden="true"></i>`;
 const ICONS = {
-  mind: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>',
-  claude: '<svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg>',
-  antigravity: '<svg viewBox="0 0 24 24"><path d="M12 3 4 20h4l4-9 4 9h4z"/></svg>',
-  all: '<svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><circle cx="12" cy="16" r="3"/></svg>',
-  chat: '<svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>',
-  folder: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
-  plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
-  x: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
-  caret: '<svg class="caret" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>',
-  check: '<svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg>',
-  tool: '<svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>',
+  mind: mi("mind", "mi-white"),
+  claude: mi("bot", "mi-white"),
+  antigravity: mi("rocket", "mi-white"),
+  all: mi("users", "mi-white"),
+  chat: mi("chat"),
+  folder: mi("folder"),
+  plus: mi("plus"),
+  x: mi("close", "mi-mono"),
+  caret: mi("chevron-down", "mi-mono caret"),
+  check: mi("check"),
+  tool: mi("bolt"),
+  star: mi("star"),
+  attach: mi("attach"),
 };
+// Шаги агента Mind приходят с маркерами [[mi:имя]] (см. mind_agent.mi) — превращаем их в иконки
+const withIcons = (html) => html.replace(/\[\[mi:([a-z-]+)\]\]\s?/g, (_, n) => mi(n, "mi-step"));
 
 const S = {
   state: null, chats: [], chat: null, agent: "mind", mode: "auto", skills: [], attachments: [],
@@ -189,7 +195,7 @@ function hero() {
   const st = S.state.status;
   const cards = S.state.agents.map((a) => {
     const ready = a.id === "all" ? true : st[a.id].ready;
-    return `<button class="agent-card${S.agent === a.id ? " sel" : ""}${ready ? "" : " off"}" data-agent="${a.id}">
+    return `<button class="agent-card mt-bounce-in${S.agent === a.id ? " sel" : ""}${ready ? "" : " off"}" data-agent="${a.id}" data-mt-tilt>
       <div class="ic ${a.id}">${ICONS[a.id]}</div>
       <div class="n">${esc(a.title)}</div><div class="s">${esc(ready ? a.subtitle : st[a.id].detail)}</div></button>`;
   }).join("");
@@ -199,7 +205,7 @@ function hero() {
     ["Сделать красивый интерфейс", "Сверстай стильный интерфейс в духе Apple для: "],
     ["Ревью кода", "Сделай строгое ревью этого кода:\n"],
   ].map(([b, t]) => `<button data-prefill="${esc(t)}"><b>${esc(b)}</b>${esc(t.split(":")[0])}</button>`).join("");
-  return `<div class="hero"><h1>Чем займёмся?</h1>
+  return `<div class="hero"><div class="hero-orb mt-orb" aria-hidden="true"></div><h1 class="mt-gradient-text">Чем займёмся?</h1>
     <p>Один разговор, все ваши ИИ. Выберите, кто отвечает, или оставьте «Все сразу».</p>
     <div class="agent-cards">${cards}</div><div class="suggest">${sug}</div></div>`;
 }
@@ -223,13 +229,13 @@ function routeText(r, agent) {
 
 function renderMsg(m) {
   if (m.role === "user") {
-    const att = (m.attachments || []).length ? `<span class="att">📎 ${m.attachments.map(esc).join(", ")}</span>` : "";
+    const att = (m.attachments || []).length ? `<span class="att">${ICONS.attach} ${m.attachments.map(esc).join(", ")}</span>` : "";
     return `<div class="msg user"><div class="bubble">${esc(m.shown ?? m.content)}${att}</div></div>`;
   }
   const agent = m.agent || "mind";
   const who = (m.route && m.route.agent && m.route.agent !== "all" && agent === "all") ? m.route.agent : agent;
   const acts = (m.activity || []).map((a) => `<span class="act">${ICONS.tool}${esc(a)}</span>`).join("");
-  const body = m.error ? `<div class="err">${esc(m.error)}</div>` : `<div class="md">${MD.render(m.content)}</div>`;
+  const body = m.error ? `<div class="err">${esc(m.error)}</div>` : `<div class="md">${withIcons(MD.render(m.content))}</div>`;
   return `<div class="msg assistant">
     <div class="who"><span class="ic ${who}" style="background:${""}">${ICONS[who] || ICONS.mind}</span><b>${esc(agentMeta(agent).title)}</b>
       <span class="route">${esc(routeText(m.route, agent))}</span></div>
@@ -370,7 +376,7 @@ function openMenu(anchor, html, onPick) {
   const h = Math.min(menu.scrollHeight, innerHeight * 0.6);
   menu.style.left = Math.min(r.left, innerWidth - menu.offsetWidth - 12) + "px";
   menu.style.top = (r.top - h - 8 > 8 ? r.top - h - 8 : r.bottom + 8) + "px";
-  $$(".mi", menu).forEach((b) => b.onclick = (e) => { e.stopPropagation(); onPick(b.dataset.v); });
+  $$(".mitem", menu).forEach((b) => b.onclick = (e) => { e.stopPropagation(); onPick(b.dataset.v); });
   setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
 }
 function closeMenu() { $("#menu").classList.add("hidden"); }
@@ -388,7 +394,7 @@ function agentMenu() {
   const st = S.state.status;
   openMenu($("#pick-agent"), '<div class="mh">Кто отвечает</div>' + S.state.agents.map((a) => {
     const ready = a.id === "all" || st[a.id].ready;
-    return `<button class="mi${ready ? "" : " off"}" data-v="${a.id}"><span class="ic ${a.id}"></span>
+    return `<button class="mitem${ready ? "" : " off"}" data-v="${a.id}"><span class="ic ${a.id}"></span>
       <span><div class="n">${esc(a.title)}</div><div class="s">${esc(ready ? a.subtitle : st[a.id].detail)}</div></span>
       ${S.agent === a.id ? `<span class="chk">${ICONS.check}</span>` : ""}</button>`;
   }).join(""), (v) => {
@@ -399,7 +405,7 @@ function agentMenu() {
 
 function modeMenu() {
   openMenu($("#pick-mode"), '<div class="mh">Режим Mind</div>' + S.state.modes.map((m) =>
-    `<button class="mi" data-v="${m.id}"><span><div class="n">${esc(m.name)}</div><div class="s">${esc(m.hint)}</div></span>
+    `<button class="mitem" data-v="${m.id}"><span><div class="n">${esc(m.name)}</div><div class="s">${esc(m.hint)}</div></span>
       ${S.mode === m.id ? `<span class="chk">${ICONS.check}</span>` : ""}</button>`).join(""),
   (v) => { S.mode = v; closeMenu(); renderPickers(); });
 }
@@ -408,7 +414,7 @@ function skillMenu(anchor = $("#pick-skill")) {
   const list = S.state.skills;
   if (!list.length) { toast("Скиллы не найдены. Положите SKILL.md в ~/.config/opencode/skills/имя/"); return; }
   openMenu(anchor, '<div class="mh">Скиллы — подключаются к запросу</div>' + list.map((s) =>
-    `<button class="mi" data-v="${esc(s.id)}"><span><div class="n">${esc(s.name)} <span class="badge">${esc(s.source)}</span></div>
+    `<button class="mitem" data-v="${esc(s.id)}"><span><div class="n">${esc(s.name)} <span class="badge">${esc(s.source)}</span></div>
       <div class="s">${esc(s.description.slice(0, 120))}</div></span>
       ${S.skills.includes(s.id) ? `<span class="chk">${ICONS.check}</span>` : ""}</button>`).join(""),
   (v) => { toggleSkill(v); closeMenu(); });
@@ -421,8 +427,8 @@ function toggleSkill(id) {
 
 function renderChips() {
   $("#chips").innerHTML = [
-    ...S.skills.map((s) => `<span class="chip">★ ${esc(s)}<button data-unskill="${esc(s)}">${ICONS.x}</button></span>`),
-    ...S.attachments.map((a, i) => `<span class="chip">📎 ${esc(a.name)}<button data-unatt="${i}">${ICONS.x}</button></span>`),
+    ...S.skills.map((s) => `<span class="chip">${ICONS.star}${esc(s)}<button data-unskill="${esc(s)}">${ICONS.x}</button></span>`),
+    ...S.attachments.map((a, i) => `<span class="chip">${ICONS.attach}${esc(a.name)}<button data-unatt="${i}">${ICONS.x}</button></span>`),
   ].join("");
   $$("[data-unskill]").forEach((b) => b.onclick = () => toggleSkill(b.dataset.unskill));
   $$("[data-unatt]").forEach((b) => b.onclick = () => { S.attachments.splice(+b.dataset.unatt, 1); renderChips(); });
@@ -451,7 +457,7 @@ function showSkills() {
   const list = S.state.skills;
   $("#panel").innerHTML = `<div class="panel-head"><h1>Скиллы</h1>
     <p>Инструкции из OpenCode, Claude Code, Antigravity и AIsktagOS. Подключённый скилл уходит агенту вместе с вопросом.</p></div>
-    <div class="grid">${list.map((s) => `<div class="card"><h3>${esc(s.name)} <span class="badge">${esc(s.source)}</span></h3>
+    <div class="grid">${list.map((s) => `<div class="card mt-bounce-in" data-mt-tilt><h3>${esc(s.name)} <span class="badge">${esc(s.source)}</span></h3>
       <p>${esc(s.description || "Без описания")}</p><div class="actions">
       <button class="btn ${S.skills.includes(s.id) ? "" : "primary"}" data-sk="${esc(s.id)}">${S.skills.includes(s.id) ? "Отключить" : "Подключить"}</button></div></div>`).join("")
       || "<p>Скиллы не найдены.</p>"}</div>`;
@@ -468,15 +474,15 @@ function showAgents() {
   const prov = S.state.providers.map((p) => `<span class="badge ok">${esc(p.title)}</span>`).join(" ") || '<span class="badge off">нет</span>';
   $("#panel").innerHTML = `<div class="panel-head"><h1>Агенты</h1><p>Кто может отвечать в Mind Studio и как их подключить.</p></div>
   <div class="grid">
-    <div class="card"><h3><span class="ic mind" style="width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:#fff">${ICONS.mind}</span>Mind
+    <div class="card mt-bounce-in" data-mt-tilt><h3><span class="ic mind" style="width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:#fff">${ICONS.mind}</span>Mind
       <span class="badge ${st.mind.ready ? "ok" : "off"}">${st.mind.ready ? "готов" : "нет моделей"}</span></h3>
       <p>Ваши модели через маршрутизатор: бесплатные и локальные первыми, резерв при лимите, кэш.</p>
       <p style="margin-top:8px">${prov}</p><div class="actions"><button class="btn" data-open-settings="keys">Ключи моделей</button></div></div>
-    <div class="card"><h3><span class="ic claude" style="width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:#fff">${ICONS.claude}</span>Claude
+    <div class="card mt-bounce-in" data-mt-tilt><h3><span class="ic claude" style="width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:#fff">${ICONS.claude}</span>Claude
       <span class="badge ${st.claude.ready ? "ok" : "off"}">${st.claude.ready ? "готов" : "не найден"}</span></h3>
       <p>Claude Code на вашей подписке. Разговор продолжает одну сессию; в папке проекта видит ваш код.</p>
       <div class="actions"><button class="btn" data-open-settings="agents">Настроить</button></div></div>
-    <div class="card"><h3><span class="ic antigravity" style="width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:#fff">${ICONS.antigravity}</span>Antigravity
+    <div class="card mt-bounce-in" data-mt-tilt><h3><span class="ic antigravity" style="width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:#fff">${ICONS.antigravity}</span>Antigravity
       <span class="badge ${st.antigravity.ready ? "ok" : "off"}">${st.antigravity.ready ? "подключён" : "мост не запущен"}</span></h3>
       ${st.antigravity.autostart
         ? `<p>Агент Antigravity отвечает прямо здесь. Мост запускается сам вместе с Antigravity. Если он не подключился, перезапустите Antigravity или отправьте <b>в чат Antigravity</b> эту просьбу:</p>`

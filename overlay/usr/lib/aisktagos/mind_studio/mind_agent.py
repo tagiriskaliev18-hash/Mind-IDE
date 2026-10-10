@@ -33,6 +33,20 @@ MAX_STEPS = 14
 TAGS = ("write", "run", "read", "list", "mkdir", "shortcut", "open", "deploy", "github")
 HIDDEN = ("think",)            # размышления «думающих» моделей в чат не выводим
 
+# Иконки Mind в шагах агента: вместо эмодзи в текст ставится маркер [[mi:имя]], интерфейс Studio
+# превращает его в иконку с фиолетово-синим градиентом (web/app.js), остальные клиенты видят короткую метку.
+MI_MARK = re.compile(r"\[\[mi:([a-z-]+)\]\]\s?")
+
+
+def mi(name: str) -> str:
+    """Маркер иконки Mind для строки, которую пользователь увидит в чате."""
+    return f"[[mi:{name}]]"
+
+
+def strip_marks(text: str) -> str:
+    """Убрать маркеры иконок (для истории, которая уходит модели)."""
+    return MI_MARK.sub("", text)
+
 OLLAMA_OPTIONS = {"num_ctx": 16384}   # иначе Ollama режет контекст до 4К и файл обрывается
 
 
@@ -303,7 +317,7 @@ class Executor:
         try:
             return getattr(self, "_" + tag)(attrs, body)
         except Exception as e:  # noqa: BLE001 — модель увидит ошибку и попробует исправить
-            return f"⚠️ {tag}: {e}", f"ОШИБКА {tag}: {e}"
+            return f"{mi('warning')} {tag}: {e}", f"ОШИБКА {tag}: {e}"
 
     def _write(self, a: dict, body: str) -> tuple[str, str]:
         target = self.path(a.get("path") or a.get("file") or a.get("name") or "")
@@ -321,12 +335,12 @@ class Executor:
         self._mark(target)
         lines = text.count("\n")
         verb = "Обновил" if existed else "Создал"
-        shown = f"📄 {verb} файл `{self.rel(target)}` ({lines} строк)"
+        shown = f"{mi('edit' if existed else 'file')} {verb} файл `{self.rel(target)}` ({lines} строк)"
         res = f"✓ файл записан: {target} ({len(text.encode())} байт, {lines} строк)"
         problem = "\n".join(p for p in (check_js(target, text) or smoke_test(target, text),
                                         missing_refs(target, text)) if p)
         if problem:
-            shown += "\n⚠️ Нашёл ошибку — исправляю"
+            shown += f"\n{mi('warning')} Нашёл ошибку — исправляю"
             res += f"\nОШИБКА в этом файле, исправь и перезапиши файл целиком:\n{problem}"
         return shown, res
 
@@ -334,19 +348,19 @@ class Executor:
         target = self.path(a.get("path") or body)
         target.mkdir(parents=True, exist_ok=True)
         self._mark(target / "x")
-        return f"📁 Создал папку `{self.rel(target)}`", f"✓ папка: {target}"
+        return f"{mi('folder')} Создал папку `{self.rel(target)}`", f"✓ папка: {target}"
 
     def _read(self, a: dict, body: str) -> tuple[str, str]:
         target = self.path(a.get("path") or body)
         text = target.read_text(encoding="utf-8", errors="replace")
         cut = text[:12000] + ("\n…(обрезано)" if len(text) > 12000 else "")
-        return f"👀 Прочитал `{self.rel(target)}`", f"Содержимое {target}:\n{cut}"
+        return f"{mi('eye')} Прочитал `{self.rel(target)}`", f"Содержимое {target}:\n{cut}"
 
     def _list(self, a: dict, body: str) -> tuple[str, str]:
         target = self.path(a.get("path") or body or ".")
         items = sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))[:200]
-        listing = "\n".join(("📁 " if p.is_dir() else "   ") + p.name for p in items) or "(пусто)"
-        return f"👀 Посмотрел папку `{self.rel(target)}`", f"Папка {target}:\n{listing}"
+        listing = "\n".join(p.name + ("/" if p.is_dir() else "") for p in items) or "(пусто)"
+        return f"{mi('folder')} Посмотрел папку `{self.rel(target)}`", f"Папка {target}:\n{listing}"
 
     def _run(self, a: dict, body: str) -> tuple[str, str]:
         cmd = body.strip()
@@ -360,7 +374,7 @@ class Executor:
         code, out = run_shell(cmd, cwd, timeout, self.should_stop)
         tail = out.strip()[-3500:]
         short = "\n".join(tail.splitlines()[-12:])
-        mark = "▶" if code == 0 else "⚠️"
+        mark = mi("terminal" if code == 0 else "warning")
         shown = f"{mark} Выполнил `{cmd.splitlines()[0][:120]}`" + ("" if code == 0 else f" — код {code}")
         if short:
             shown += f"\n```\n{short}\n```"
@@ -374,7 +388,7 @@ class Executor:
             raise FileNotFoundError(f"нет такого файла: {target}")
         name = re.sub(r'[\\/:*?"<>|]', "", a.get("name") or Path(target).stem or "Mind").strip() or "Mind"
         lnk = make_shortcut(name, target, a.get("icon", ""))
-        return f"🔗 Создал ярлык «{name}» на рабочем столе", f"✓ ярлык создан: {lnk} → {target}"
+        return f"{mi('link')} Создал ярлык «{name}» на рабочем столе", f"✓ ярлык создан: {lnk} → {target}"
 
     def _open(self, a: dict, body: str) -> tuple[str, str]:
         raw = a.get("target") or a.get("path") or a.get("url") or body.strip()
@@ -382,7 +396,7 @@ class Executor:
         if not re.match(r"https?://", target) and not Path(target).exists():
             raise FileNotFoundError(f"нет такого файла: {target}")
         open_path(target)
-        return f"🚀 Открыл `{self.rel(Path(target)) if not target.startswith('http') else target}`", f"✓ открыто: {target}"
+        return f"{mi('external')} Открыл `{self.rel(Path(target)) if not target.startswith('http') else target}`", f"✓ открыто: {target}"
 
     def _deploy(self, a: dict, body: str) -> tuple[str, str]:
         folder = self.path(a.get("dir") or a.get("path") or ".")
@@ -609,7 +623,7 @@ def deploy_surge(folder: Path, name: str, should_stop=None) -> tuple[str, str]:
                          env=env, creationflags=NO_WINDOW, encoding="utf-8", errors="replace")
     if "not authenticated" in (who.stdout + who.stderr).lower() and not os.environ.get("SURGE_TOKEN"):
         _visible_console("surge " + _q(str(folder)) + " " + _q(domain), folder)
-        return (f"🌐 Открыл окно Surge: введите там email и пароль один раз (аккаунт бесплатный и создаётся сразу). "
+        return (f"{mi('globe')} Открыл окно Surge: введите там email и пароль один раз (аккаунт бесплатный и создаётся сразу). "
                 f"После этого сайт появится на https://{domain}, а дальше Mind публикует сам.",
                 f"Пользователь ещё не вошёл в Surge: открыто окно входа, после входа сайт будет на https://{domain}. "
                 "Скажи пользователю ввести email и пароль в открывшемся окне.")
@@ -619,7 +633,7 @@ def deploy_surge(folder: Path, name: str, should_stop=None) -> tuple[str, str]:
                            errors="replace")
         out = re.sub(r"\x1b\[[0-9;]*m", "", r.stdout + r.stderr)
         if r.returncode == 0 and "success" in out.lower():
-            return f"🌐 Опубликовал сайт: https://{domain}", f"✓ сайт опубликован: https://{domain}"
+            return f"{mi('globe')} Опубликовал сайт: https://{domain}", f"✓ сайт опубликован: https://{domain}"
         if attempt == 0 and re.search(r"do not have permission|already|taken", out, re.I):
             domain = domain.replace(".surge.sh", f"-{int(time.time()) % 100000}.surge.sh")
             continue
@@ -641,12 +655,12 @@ def publish_github(folder: Path, name: str, private: bool, should_stop=None) -> 
         steps.append("коммит")
     gh = shutil.which("gh")
     if not gh:
-        return ("📦 Сделал " + ", ".join(steps or ["ничего нового"]) + ". Для публикации на GitHub нужен GitHub CLI "
+        return (mi("upload") + " Сделал " + ", ".join(steps or ["ничего нового"]) + ". Для публикации на GitHub нужен GitHub CLI "
                 "(winget install GitHub.cli).", "git готов локально; GitHub CLI не установлен")
     auth = subprocess.run([gh, "auth", "status"], capture_output=True, text=True, timeout=30, creationflags=NO_WINDOW)
     if auth.returncode != 0:
         _visible_console("gh auth login --web --git-protocol https", folder)
-        return ("📦 Сделал " + ", ".join(steps or ["коммит"]) + ". Открыл окно входа в GitHub: войдите один раз, "
+        return (mi("upload") + " Сделал " + ", ".join(steps or ["коммит"]) + ". Открыл окно входа в GitHub: войдите один раз, "
                 "и Mind будет публиковать сам.", "Пользователь не вошёл в GitHub: открыто окно gh auth login. "
                 "Попроси войти и потом повтори <github>.")
     remote = git("remote", "get-url", "origin")
@@ -663,7 +677,7 @@ def publish_github(folder: Path, name: str, private: bool, should_stop=None) -> 
         if p.returncode != 0:
             raise OSError("git push: " + (p.stderr or p.stdout).strip()[-300:])
         url = remote.stdout.strip()
-    return f"📦 Опубликовал на GitHub ({', '.join(steps + ['push'])}): {url}", f"✓ GitHub: {url}"
+    return f"{mi('upload')} Опубликовал на GitHub ({', '.join(steps + ['push'])}): {url}", f"✓ GitHub: {url}"
 
 
 # ---------------------------------------------------------------------------
@@ -778,7 +792,9 @@ def _run(chat: dict, history: list[dict], user_text: str, opts: dict, should_sto
     for _step in range(MAX_STEPS):
         if should_stop():
             return
-        msgs = [{"role": "system", "content": system}] + history[-4:] + _compact(loop)
+        msgs = [{"role": "system", "content": system}] + \
+            [{**h, "content": strip_marks(h["content"])} if isinstance(h.get("content"), str) else h
+             for h in history[-4:]] + _compact(loop)
         routes: list[dict] = []
         parser = ActionStream()
         raw: list[str] = []
@@ -876,7 +892,7 @@ def _run(chat: dict, history: list[dict], user_text: str, opts: dict, should_sto
         if blocked:
             chat["pending_actions"] = [{k: b[k] for k in ("tag", "attrs", "body")} for b in blocked]
             ask = "\n".join(f"• {b['why']}" for b in blocked)
-            yield "text", f"\n\n⏸ Нужно ваше подтверждение:\n{ask}\n\nНапишите «да», чтобы выполнить, или что-то другое, чтобы отменить."
+            yield "text", f"\n\n{mi('pause')} Нужно ваше подтверждение:\n{ask}\n\nНапишите «да», чтобы выполнить, или что-то другое, чтобы отменить."
             return
 
         # Модель выдала код вместо действий — один раз подталкиваем, потом сохраняем блоки сами
@@ -949,7 +965,7 @@ def _run(chat: dict, history: list[dict], user_text: str, opts: dict, should_sto
             trace["problem"] = broken
             yield "text", _unfixed(broken)
         elif sites and not deployed and not re.search(r"опублик|хостинг|deploy", prev_text, re.I):
-            yield "text", (f"\n\n🌐 Могу бесплатно опубликовать сайт в интернете (Surge) — напишите «опубликуй», "
+            yield "text", (f"\n\n{mi('globe')} Могу бесплатно опубликовать сайт в интернете (Surge) — напишите «опубликуй», "
                            "и через минуту у него будет свой адрес.")
         return
     if broken:
@@ -965,7 +981,7 @@ def _unfixed(problem: str) -> str:
     tip = ("Напишите «исправь» — попробую ещё раз. Для сложных программ добавьте бесплатный ключ Groq, Gemini или "
            "NVIDIA в «Настройки → Ключи»: Mind будет писать код сильной облачной моделью."
            if agent_model(ai.load_config()) else "Напишите «исправь» — попробую ещё раз.")
-    return f"\n\n⚠️ Не смог до конца исправить ошибку: {problem.splitlines()[0][:300]}\n\n{tip}"
+    return f"\n\n{mi('warning')} Не смог до конца исправить ошибку: {problem.splitlines()[0][:300]}\n\n{tip}"
 
 
 # Какие локальные модели лучше справляются с ролью агента (проверено на задаче «игра-головоломка с ярлыком»:

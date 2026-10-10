@@ -336,7 +336,7 @@ class StudioUI(unittest.TestCase):
     def test_3_agent_menu_and_claude(self):
         p = self.page
         p.click("#pick-agent")
-        p.click(".menu .mi[data-v=claude]")
+        p.click(".menu .mitem[data-v=claude]")
         p.fill("#input", "Прочитай README")
         p.keyboard.press("Enter")
         p.wait_for_selector(".activity .act", timeout=20000)
@@ -389,6 +389,15 @@ class StudioUI(unittest.TestCase):
             p.click("#btn-handoff")
             p.wait_for_function("document.querySelector('#toast').textContent.includes('устройств')")
             self.shot("8-handoff")
+
+    def test_8b_mind_icon_marks(self):
+        # шаги агента Mind приходят с маркерами [[mi:имя]] вместо эмодзи — интерфейс рисует иконки Mind
+        html = self.page.evaluate("withIcons(MD.render('[[mi:file]] Создал файл `a.html`\\n\\n[[mi:warning]] Ошибка'))")
+        self.assertIn('class="mi mi-file mi-step"', html)
+        self.assertIn('class="mi mi-warning mi-step"', html)
+        self.assertNotIn("[[mi:", html)
+        from mind_studio import mind_agent
+        self.assertEqual(mind_agent.strip_marks(mind_agent.mi("globe") + " Опубликовал"), "Опубликовал")
 
     def test_9_no_js_errors(self):
         self.assertEqual(self.errors, [])

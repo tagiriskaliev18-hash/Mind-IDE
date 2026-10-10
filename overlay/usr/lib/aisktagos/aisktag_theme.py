@@ -1,8 +1,9 @@
-"""Тема «Aurora 2.0» — Apple-like стиль для PyQt-приложений AIsktagOS.
+"""Тема «Aurora 3.0» — единый стиль Mind для PyQt-приложений AIsktagOS.
 
 Философия:
   • Абсолютный чёрный фон — как в OLED-дисплеях Apple
-  • Единственный фирменный градиент: фиолетовый → циан
+  • Единый стиль Mind: фиолетово-синий градиент #a46cf0 → #7c66df → #5b8dee → #49b3f7,
+    объёмные кнопки (блик сверху, тень снизу), bounce — см. mind_qtfx.py; никаких эмодзи, только иконки Mind
   • Крупные скругления (16–24px на карточках)
   • Frosted-glass оверлеи через полупрозрачные фоны
   • Каждое приложение — свой акцентный цвет (APP_ACCENTS)
@@ -70,7 +71,17 @@ def _load_accents() -> dict[str, tuple[str, str]]:
         return _APP_ACCENTS_FB
 
 
+def _load_stops() -> list[str]:
+    """Стопы фиолетово-синего градиента Mind из токенов (Aurora 3.0)."""
+    try:
+        data = json.loads(_TOKENS_FILE.read_text(encoding="utf-8"))
+        return list(data["gradient"]["stops"])
+    except (OSError, ValueError, KeyError):
+        return ["#a46cf0", "#7c66df", "#5b8dee", "#49b3f7"]
+
+
 C: dict[str, str] = _load()
+STOPS: list[str] = _load_stops()
 APP_ACCENTS: dict[str, tuple[str, str]] = _load_accents()
 
 
@@ -86,8 +97,14 @@ def app_accent(app: str) -> tuple[str, str]:
 
 
 def gradient_aurora(angle: int = 135) -> str:
-    """CSS-like строка градиента Aurora для использования в QSS."""
-    return f"qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {C['ai']}, stop:0.5 {C['aiMid']}, stop:1 {C['aiCyan']})"
+    """Фиолетово-синий градиент Mind для QSS."""
+    parts = ", ".join(f"stop:{round(i / (len(STOPS) - 1), 2)} {c}" for i, c in enumerate(STOPS))
+    return f"qlineargradient(x1:0,y1:0,x2:1,y2:1, {parts})"
+
+
+def gradient_hover() -> str:
+    """Тот же градиент, сдвинутый к синему, — для наведения."""
+    return f"qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {STOPS[1]}, stop:0.6 {STOPS[2]}, stop:1 {STOPS[-1]})"
 
 
 def base_qss() -> str:
@@ -174,35 +191,25 @@ QPushButton:disabled {{
     border: 1px solid {rgba('text', 0.04)};
 }}
 
-/* Основная кнопка действия */
-QPushButton#primary {{
+/* Основная кнопка действия и кнопка ИИ — объёмные, с градиентом Mind (блик сверху, тень снизу) */
+QPushButton#primary, QPushButton#ai {{
     color: #ffffff;
     font-weight: 600;
-    background: {C['accentStrong']};
+    background: {gradient_aurora()};
     border: none;
-    border-radius: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.35);
+    border-bottom: 2px solid rgba(20, 10, 60, 0.45);
+    border-radius: 12px;
     padding: 9px 22px;
 }}
-QPushButton#primary:hover {{
-    background: {C['accentHover']};
+QPushButton#primary:hover, QPushButton#ai:hover {{
+    background: {gradient_hover()};
 }}
-QPushButton#primary:pressed {{
-    background: {C['accent']};
-}}
-
-/* Кнопка ИИ — Aurora-градиент */
-QPushButton#ai {{
-    color: #ffffff;
-    font-weight: 600;
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-        stop:0 {C['ai']}, stop:1 {C['aiMid']});
-    border: none;
-    border-radius: 10px;
-    padding: 9px 22px;
-}}
-QPushButton#ai:hover {{
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-        stop:0 {C['aiMid']}, stop:1 {C['aiCyan']});
+QPushButton#primary:pressed, QPushButton#ai:pressed {{
+    border-top: 2px solid rgba(20, 10, 60, 0.45);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding-top: 10px;
+    padding-bottom: 8px;
 }}
 
 /* Призрак-кнопка (без фона) */
@@ -275,7 +282,7 @@ QComboBox {{
     color: {C['text']};
     font-size: 10pt;
 }}
-QComboBox:focus {{ border: 1.5px solid {C['accent']}; }}
+QComboBox:focus {{ border: 1.5px solid {STOPS[2]}; }}
 QComboBox::drop-down {{ border: none; width: 24px; }}
 QComboBox QAbstractItemView {{
     background: {C['surface2']};
@@ -297,7 +304,7 @@ QScrollBar::handle:vertical {{
     min-height: 24px;
 }}
 QScrollBar::handle:vertical:hover {{
-    background: {rgba('accent', 0.6)};
+    background: {gradient_aurora()};
 }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QScrollBar:horizontal {{ height: 0; }}

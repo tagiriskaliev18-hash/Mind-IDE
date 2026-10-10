@@ -4,36 +4,40 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mind Studio</title>
+<!-- Единый стиль Mind (MindKit design/): иконки .mi, 3D-кнопки, переливающийся градиент, bounce -->
+<link rel="stylesheet" href="mind/mind-ui.css">
 <link rel="stylesheet" href="app.css">
+<link rel="icon" href="mind/mind.svg" type="image/svg+xml">
+<script src="mind/mind-ui.js" defer></script>
 </head>
 <body>
 <div id="app" class="app">
   <!-- Боковая панель -->
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-mark" aria-hidden="true"></div>
-      <span class="brand-name">Mind Studio</span>
+      <div class="brand-mark mt-orb" aria-hidden="true"></div>
+      <span class="brand-name mt-gradient-text">Mind Studio</span>
     </div>
 
     <nav class="nav">
-      <button class="nav-item primary" id="btn-new" title="Ctrl+N">
-        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      <button class="nav-item primary mt-bounce" id="btn-new" title="Ctrl+N">
+        <i class="mi mi-plus" aria-hidden="true"></i>
         <span>Новый разговор</span><kbd>Ctrl N</kbd>
       </button>
       <button class="nav-item" data-view="history">
-        <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>
+        <i class="mi mi-clock" aria-hidden="true"></i>
         <span>История</span>
       </button>
       <button class="nav-item" data-view="skills">
-        <svg viewBox="0 0 24 24"><path d="m12 3 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8-4.3-4.1 5.9-.9z"/></svg>
+        <i class="mi mi-star" aria-hidden="true"></i>
         <span>Скиллы</span><span class="count" id="skills-count"></span>
       </button>
       <button class="nav-item" data-view="agents">
-        <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.4"/><path d="M3 19c.8-3.2 3.2-5 6-5s5.2 1.8 6 5M14.5 14.3c2.6-.4 5 1 5.8 4"/></svg>
+        <i class="mi mi-users" aria-hidden="true"></i>
         <span>Агенты</span>
       </button>
       <button class="nav-item" id="btn-settings">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        <i class="mi mi-settings" aria-hidden="true"></i>
         <span>Настройки</span>
       </button>
     </nav>
@@ -65,15 +69,15 @@
   <main class="main">
     <header class="topbar">
       <button class="icon-btn" id="btn-toggle-side" title="Скрыть панель">
-        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+        <i class="mi mi-menu" aria-hidden="true"></i>
       </button>
       <div class="crumbs" id="crumbs"><span>Mind Studio</span></div>
       <div class="top-actions">
         <button class="icon-btn hidden" id="btn-handoff" title="Продолжить на другом устройстве (Handoff)">
-          <svg viewBox="0 0 24 24"><rect x="2" y="5" width="13" height="10" rx="2"/><rect x="17" y="8" width="5" height="11" rx="1.5"/><path d="M6 19h6"/></svg>
+          <i class="mi mi-devices" aria-hidden="true"></i>
         </button>
         <button class="icon-btn" id="btn-theme" title="Светлая / тёмная тема">
-          <svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          <i class="mi mi-moon" aria-hidden="true"></i>
         </button>
       </div>
     </header>
@@ -91,7 +95,7 @@
             <div class="composer-bar">
               <div class="left">
                 <button class="pill icon" id="btn-attach" title="Вложить файл">
-                  <svg viewBox="0 0 24 24"><path d="m21 11-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2L9.8 17a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>
+                  <i class="mi mi-attach" aria-hidden="true"></i>
                 </button>
                 <div class="picker" data-picker="agent"><button class="pill" id="pick-agent"></button></div>
                 <div class="picker" data-picker="mode"><button class="pill" id="pick-mode"></button></div>
@@ -100,8 +104,8 @@
               <div class="right">
                 <span class="hint" id="hint"></span>
                 <button class="send" id="btn-send" title="Отправить (Enter)">
-                  <svg viewBox="0 0 24 24" class="i-send"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-                  <svg viewBox="0 0 24 24" class="i-stop"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+                  <i class="mi mi-white mi-send i-send" aria-hidden="true"></i>
+                  <i class="mi mi-white mi-stop i-stop" aria-hidden="true"></i>
                 </button>
               </div>
             </div>
@@ -127,7 +131,7 @@
     <div class="modal-body">
       <div class="modal-head">
         <h2 id="settings-title">Настройки</h2>
-        <button class="icon-btn" id="settings-close" title="Закрыть"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        <button class="icon-btn" id="settings-close" title="Закрыть"><i class="mi mi-close" aria-hidden="true"></i></button>
       </div>
       <div class="modal-content" id="settings-content"></div>
     </div>

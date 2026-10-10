@@ -20,6 +20,7 @@ SHARE = PROJECT / "overlay" / "usr" / "share"
 
 sys.path.insert(0, str(LIB_DIR))
 os.environ.setdefault("AISKTAG_TOKENS", str(SHARE / "aisktagos" / "design" / "tokens.json"))
+os.environ.setdefault("AISKTAG_DESIGN", str(SHARE / "aisktagos" / "design"))   # иконки Mind и стили (mind_qtfx)
 os.environ.setdefault("AISKTAG_CATALOG", str(SHARE / "aisktagos" / "ai" / "models.json"))
 os.environ.setdefault("AISKTAG_MIND_ICON", str(PROJECT / "tools" / "windows" / "mind.ico") if sys.platform == "win32"
                       else str(SHARE / "icons" / "hicolor" / "256x256" / "apps" / "aisktagos-mind.jpg"))
