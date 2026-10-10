@@ -1,0 +1,25 @@
+/* Aurora 3.0 — собрано mindkit design qss, не править вручную */
+QWidget { background: #09090f; color: #f5f5f7; font-size: 11pt; }
+QLineEdit, QTextEdit, QPlainTextEdit { background: #141421; border: 1px solid #1c1c2e;
+  border-radius: 10px; padding: 6px; selection-background-color: #9B5DE5; }
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus { border-color: #5b8dee; }
+QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.0 #a46cf0, stop:0.33 #7c66df, stop:0.67 #5b8dee, stop:1.0 #49b3f7); color: #ffffff; border: 0; border-radius: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.35); border-bottom: 2px solid rgba(20, 10, 60, 0.45);
+  padding: 6px 14px; font-weight: 600; }
+QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ab74ef, stop:0.5 #6f9cf3, stop:1 #4df8ff); }
+QPushButton:pressed { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #7f45c7, stop:0.5 #4a76d0, stop:1 #00c8d4); border-top: 2px solid rgba(20, 10, 60, 0.45);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-top: 7px; padding-bottom: 5px; }
+QPushButton:disabled { background: #1c1c2e; color: #636378; border: 0; }
+QPushButton[flat="true"], QToolButton { background: transparent; border: 0; border-radius: 10px; padding: 6px; }
+QPushButton[flat="true"]:hover, QToolButton:hover { background: rgba(155, 93, 229, 0.16); }
+QPushButton[flat="true"]:pressed, QToolButton:pressed { background: rgba(91, 141, 238, 0.28); }
+QListWidget, QTreeWidget { background: #0f0f1a; border: 0; border-radius: 16px; }
+QListWidget::item:selected, QTreeWidget::item:selected { background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+  stop:0 rgba(155, 93, 229, 0.45), stop:1 rgba(0, 245, 255, 0.18)); color: #f5f5f7; }
+QTabBar::tab:selected { border-bottom: 2px solid #5b8dee; }
+QProgressBar { background: #141421; border: 0; border-radius: 5px; height: 10px; text-align: center; }
+QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.0 #a46cf0, stop:0.33 #7c66df, stop:0.67 #5b8dee, stop:1.0 #49b3f7); border-radius: 5px; }
+QToolTip { background: #1c1c2e; color: #f5f5f7; border: 1px solid #9B5DE5; padding: 4px; }
+QScrollBar:vertical { background: transparent; width: 10px; }
+QScrollBar::handle:vertical { background: #1c1c2e; border-radius: 5px; min-height: 24px; }
+QScrollBar::handle:vertical:hover { background: #9B5DE5; }

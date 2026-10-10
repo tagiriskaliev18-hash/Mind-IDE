@@ -20,7 +20,8 @@ sys.path.insert(0, "/usr/lib/aisktagos")
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # Windows и запуск из репозитория
 import aisktag_ai as ai  # noqa: E402
 import aisktag_theme as T  # noqa: E402
-from PyQt6.QtCore import QEvent, QObject, Qt, QThread, QTimer, pyqtSignal  # noqa: E402
+import mind_qtfx as fx  # noqa: E402 — иконки Mind, bounce и перелив градиента
+from PyQt6.QtCore import QEvent, QObject, QSize, Qt, QThread, QTimer, pyqtSignal  # noqa: E402
 from PyQt6.QtGui import QGuiApplication, QIcon, QKeySequence, QShortcut  # noqa: E402
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket  # noqa: E402
 from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,  # noqa: E402
@@ -51,7 +52,10 @@ QLabel#who {{ font-size: 9pt; font-weight: 600; letter-spacing: 1px; }}
 QLabel#chip {{ background: {T.C['surface']}; border: 1px solid {T.rgba('focus', 0.18)}; border-radius: 12px; padding: 3px 10px; }}
 QLabel#route {{ font-size: 8pt; color: {T.C['muted']}; }}
 QLabel#attach {{ background: {T.rgba('ai', 0.2)}; border: 1px solid {T.rgba('aiText', 0.4)}; border-radius: 10px; padding: 3px 10px; color: {T.C['aiText']}; }}
-QPushButton#suggest {{ text-align: left; padding: 10px 14px; border-radius: 12px; background: {T.C['surface']}; }}
+QPushButton#suggest {{ text-align: left; padding: 10px 14px; border-radius: 12px; background: {T.C['surface']};
+    border: 1px solid {T.rgba('text', 0.06)}; border-bottom: 2px solid rgba(10, 5, 30, 0.45); }}
+QPushButton#suggest:hover {{ background: {T.C['surface2']}; border: 1px solid {T.rgba('aiMid', 0.45)};
+    border-bottom: 2px solid {T.rgba('ai', 0.5)}; }}
 QPlainTextEdit#input {{ border-radius: 14px; padding: 10px 12px; }}
 """
 
@@ -128,7 +132,10 @@ class Bubble(QFrame):
 
     def set_text(self, text: str) -> None:
         self.text = text
-        if self.role == "user":
+        if fx.MARK.search(text):          # маркеры [[mi:имя]] → иконки Mind
+            self.text = fx.MARK.sub("", text)
+            self.body.setHtml(fx.marks_to_html(text))
+        elif self.role == "user":
             self.body.setPlainText(text)
         else:
             self.body.setMarkdown(text)
@@ -183,9 +190,9 @@ class Mind(QWidget):
         bar = QFrame(objectName="bar")
         bl = QHBoxLayout(bar)
         bl.setContentsMargins(16, 10, 16, 10)
-        title = QLabel("Mind")
-        title.setObjectName("h2")
-        title.setStyleSheet(f"color: {T.C['aiText']};")
+        logo = QLabel()
+        logo.setPixmap(fx.icon("mind", 64).pixmap(QSize(28, 28)))
+        title = fx.gradient_label("Mind", "h2")
         self.chip = QLabel("…")
         self.chip.setObjectName("chip")
         self.persona_box = QComboBox()
@@ -197,11 +204,15 @@ class Mind(QWidget):
         self.fill_modes()
         new = QPushButton("Новый чат")
         new.setObjectName("ghost")
+        new.setIcon(fx.icon("compose"))
         new.clicked.connect(self.new_chat)
         cfg_btn = QPushButton("Настройки ИИ")
         cfg_btn.setObjectName("ghost")
+        cfg_btn.setIcon(fx.icon("settings"))
+        for b in (new, cfg_btn):
+            fx.bounce_on_hover(b, 2)
         cfg_btn.clicked.connect(self.open_settings)
-        for w in (title, self.chip):
+        for w in (logo, title, self.chip):
             bl.addWidget(w)
         bl.addStretch(1)
         for w in (self.mode_box, self.persona_box, new, cfg_btn):
@@ -233,11 +244,21 @@ class Mind(QWidget):
         self._filter = EnterFilter(self.send)
         self.input.installEventFilter(self._filter)
         file_btn = QPushButton("Файл…")
+        file_btn.setIcon(fx.icon("attach"))
         file_btn.clicked.connect(self.attach_file)
         clip_btn = QPushButton("Из буфера")
+        clip_btn.setIcon(fx.icon("copy"))
         clip_btn.clicked.connect(self.attach_clipboard)
         self.send_btn = QPushButton("Отправить")
         self.send_btn.setObjectName("ai")
+        self.send_btn.setIcon(fx.icon("send", white=True))
+        # главная кнопка: объёмная, градиент Mind переливается, пружина при наведении
+        fx.shimmer(self.send_btn, selector="QPushButton#ai",
+                   extra="color: #fff; border: none; border-top: 1px solid rgba(255,255,255,0.35);"
+                         " border-bottom: 2px solid rgba(20,10,60,0.45); border-radius: 12px; padding: 9px 22px;",
+                   after="QPushButton#ai:pressed { border-top: 2px solid rgba(20,10,60,0.45);"
+                         " border-bottom: 1px solid rgba(255,255,255,0.2); }")
+        fx.bounce_on_hover(self.send_btn)
         self.send_btn.clicked.connect(self.on_send_clicked)
         btns = QVBoxLayout()
         btns.addWidget(self.send_btn)
@@ -300,8 +321,7 @@ class Mind(QWidget):
         box = QWidget()
         lay = QVBoxLayout(box)
         lay.setSpacing(10)
-        head = QLabel("Чем помочь?")
-        head.setObjectName("h1")
+        head = fx.gradient_label("Чем помочь?", "h1")
         sub = QLabel("Один чат — много моделей: Mind сам выбирает, кто ответит, бесплатные и локальные первыми, "
                      "а при лимите передаёт вопрос следующей модели. Режим и роль — вверху справа.")
         sub.setObjectName("muted")
@@ -313,6 +333,8 @@ class Mind(QWidget):
         for label, prefill in SUGGESTIONS:
             b = QPushButton(label)
             b.setObjectName("suggest")
+            b.setIcon(fx.icon("sparkles"))
+            fx.bounce_on_hover(b, 2)
             b.clicked.connect(lambda _=False, t=prefill: self.prefill(t))
             lay.addWidget(b)
         return box
@@ -330,12 +352,15 @@ class Mind(QWidget):
     def add_attachment(self, name: str, text: str) -> None:
         text = text[:MAX_ATTACH]
         self.attachments.append((name, text))
-        chip = QPushButton(f"📎 {name} ✕")
+        chip = QPushButton(f"{name}  ×")
+        chip.setIcon(fx.icon("attach"))
+        chip.setToolTip("Нажмите, чтобы убрать вложение")
         chip.setObjectName("attach")
         chip.setStyleSheet(f"QPushButton {{ background: {T.rgba('ai', 0.2)}; border: 1px solid {T.rgba('aiText', 0.4)};"
                            f" border-radius: 10px; padding: 3px 10px; color: {T.C['aiText']}; }}")
         chip.clicked.connect(lambda: (self.attachments.remove((name, text)), chip.hide(), chip.deleteLater()))
         self.attach_row.insertWidget(self.attach_row.count() - 1, chip)
+        QTimer.singleShot(30, lambda: fx.bounce(chip, 5))
 
     def attach_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Вложить файл")
@@ -358,6 +383,7 @@ class Mind(QWidget):
         self.empty.hide()
         b = Bubble(role)
         self.feed.insertWidget(self.feed.count() - 1, b)
+        QTimer.singleShot(40, lambda: fx.bounce(b, 6))     # сообщение появляется с пружиной
         return b
 
     def new_chat(self) -> None:
@@ -385,7 +411,7 @@ class Mind(QWidget):
         shown, content = text, text
         for name, body in self.attachments:
             content += f"\n\n[{name}]\n```\n{body}\n```"
-            shown += f"\n📎 {name}"
+            shown += f"\n[[mi:attach]] {name}"
         self.attachments.clear()
         for i in reversed(range(self.attach_row.count())):
             w = self.attach_row.itemAt(i).widget()
@@ -412,6 +438,7 @@ class Mind(QWidget):
         self.worker.failed.connect(self.on_failed)
         self.worker.finished.connect(self.on_done)
         self.send_btn.setText("Стоп")
+        self.send_btn.setIcon(fx.icon("stop", white=True))
         self.worker.start()
         self.render_timer.start()
         self.scroll_down()
@@ -434,7 +461,7 @@ class Mind(QWidget):
 
     def on_failed(self, msg: str) -> None:
         if self.current:
-            self.current.set_text(f"⚠️ {msg}")
+            self.current.set_text(f"[[mi:warning]] {msg}")
         self.buf = ""
 
     def on_done(self) -> None:
@@ -447,6 +474,7 @@ class Mind(QWidget):
             self.current.set_text("(пустой ответ)")
         self.worker = None
         self.send_btn.setText("Отправить")
+        self.send_btn.setIcon(fx.icon("send", white=True))
         self.send_btn.setEnabled(True)
         self.update_state()
         self.input.setFocus()
