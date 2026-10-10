@@ -302,6 +302,31 @@ class RouterTest(unittest.TestCase):
         self.assertIn("groq", ai.available_providers())
         self.assertEqual(ai.provider_key("groq"), "from-file")
 
+    def test_custom_gateway_with_key_from_env_file(self):
+        setup_providers({})
+        envf = Path(TMP) / "shared.env"
+        envf.write_text("GW_API_KEY=gw-secret-1\nKIMI_API_KEY=not-for-moonshot\n", encoding="utf-8")
+        ai.USER_CONF.parent.mkdir(parents=True, exist_ok=True)
+        ai.USER_CONF.write_text(json.dumps({"env_files": [str(envf)], "custom_providers": {
+            "gw": {"title": "GW", "base_url": "http://127.0.0.1:9/v1", "env": "GW_API_KEY", "model": "m1"},
+            "deeponly": {"base_url": "http://127.0.0.1:9/v1", "env": "GW_API_KEY", "models": {"deep": ["d1"]}},
+            "free": {"base_url": "http://127.0.0.1:9/v1", "keyless": True, "model": "f1"}}}), encoding="utf-8")
+        saved = {k: list(v) for k, v in ai.DEFAULT_ROUTE.items()}
+        try:
+            ai._keys_from_env_files()
+            ai._add_custom_providers()
+            self.assertEqual(ai.provider_key("gw"), "gw-secret-1")
+            self.assertNotIn("kimi", ai.available_providers())      # ключ шлюза не уходит встроенному Kimi
+            self.assertIn("free", ai.available_providers())
+            self.assertNotIn("deeponly", ai.DEFAULT_ROUTE["fast"])
+            self.assertLess(ai.DEFAULT_ROUTE["deep"].index("deeponly"), ai.DEFAULT_ROUTE["deep"].index("openai"))
+            self.assertNotIn("gw-secret-1", ai.USER_CONF.read_text(encoding="utf-8"))
+        finally:
+            for pid in ("gw", "deeponly", "free"):
+                ai.PROVIDERS.pop(pid, None)
+            ai.DEFAULT_ROUTE.update(saved)
+            ai._ENV_FILES.clear()
+
     def test_catalog_local_vs_cloud(self):
         cat = ai.load_catalog()
         self.assertTrue(cat["models"])

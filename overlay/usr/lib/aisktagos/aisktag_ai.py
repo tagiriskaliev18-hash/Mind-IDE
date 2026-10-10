@@ -247,6 +247,65 @@ def _read_user_conf() -> dict:
         return {}
 
 
+_ENV_FILES: dict[str, str] = {}
+
+
+def _keys_from_env_files() -> None:
+    """Переменные из .env-файлов, перечисленных в ai.json: "env_files": ["C:/projects/tools/.env"].
+
+    Ключи остаются в одном месте (общий .env экосистемы) и не копируются в ai.json. Их видят только свои
+    шлюзы (custom_providers): ключ шлюза с именем KIMI_API_KEY не должен уйти встроенному Kimi.
+    Переменные окружения важнее. Значения нигде не печатаются.
+    """
+    for f in _read_user_conf().get("env_files") or []:
+        try:
+            lines = Path(os.path.expandvars(str(f))).expanduser().read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for line in lines.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            name, _, val = line.removeprefix("export ").partition("=")
+            name, val = name.strip(), val.strip().strip("'\"")
+            if name.isidentifier() and val:
+                _ENV_FILES.setdefault(name, val)
+
+
+def _add_custom_providers() -> None:
+    """Свои OpenAI-совместимые шлюзы из ai.json, поле "custom_providers":
+
+        {"cvc": {"title": "CVC", "base_url": "https://…/v1", "env": "CVC_API_KEY",
+                 "models": {"fast": ["qwen3.8-flash"], "code": ["deepseek-v4-pro"], "deep": ["deepseek-v4-pro"]}}}
+
+    "model": "…" вместо "models" — одна модель на все уровни; "keyless": true — шлюз без ключа.
+    Ключ — в переменной env (в т. ч. из env_files) или в "keys" под тем же id. В очереди свои шлюзы стоят
+    после бесплатных служб и перед платными OpenAI и Claude.
+    """
+    for pid, c in (_read_user_conf().get("custom_providers") or {}).items():
+        if not isinstance(c, dict) or not c.get("base_url") or (pid in PROVIDERS and not PROVIDERS[pid].get("custom")):
+            continue
+        models = c.get("models") if isinstance(c.get("models"), dict) else {}
+        one = [c["model"]] if c.get("model") else []
+        if not one and not any(models.get(t) for t in TIERS):
+            continue
+        env = c.get("env") or []
+        PROVIDERS[pid] = {
+            "title": str(c.get("title") or pid), "kind": "openai", "base_url": str(c["base_url"]).rstrip("/"),
+            "env": [env] if isinstance(env, str) else list(env), "free": bool(c.get("free")),
+            "models": {t: list(models.get(t) or one) for t in TIERS},
+            "description": str(c.get("description") or "свой шлюз из ai.json"),
+            "custom": True, "keyless": bool(c.get("keyless")),
+        }
+        for tier, order in DEFAULT_ROUTE.items():
+            if PROVIDERS[pid]["models"][tier] and pid not in order:   # без модели для уровня — не в его очереди
+                order.insert(order.index("openai") if "openai" in order else len(order), pid)
+
+
+_keys_from_env_files()
+_add_custom_providers()
+
+
 def load_config() -> dict:
     """Читает конфиг из файла, затем перекрывает переменными окружения."""
     cfg = dict(DEFAULTS)
@@ -296,6 +355,8 @@ def provider_key(name: str, cfg: dict | None = None) -> str:
     for env in PROVIDERS.get(name, {}).get("env", []):
         if os.environ.get(env):
             return os.environ[env]
+        if PROVIDERS[name].get("custom") and _ENV_FILES.get(env):
+            return _ENV_FILES[env]
     cfg = cfg if cfg is not None else load_config()
     return (cfg.get("keys") or {}).get(name, "")
 
@@ -391,7 +452,7 @@ def available_providers(cfg: dict | None = None, *, check_local: bool = True) ->
         elif name == "ollama":
             if check_local and ollama_models():
                 out.append(name)
-        elif provider_key(name, cfg):
+        elif PROVIDERS[name].get("keyless") or provider_key(name, cfg):
             out.append(name)
     return out
 
