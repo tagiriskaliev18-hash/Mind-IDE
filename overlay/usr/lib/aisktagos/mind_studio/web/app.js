@@ -1,9 +1,14 @@
 // Mind Studio — интерфейс. Говорит с локальным сервером (server.py) по JSON и SSE.
 "use strict";
 
-const TOKEN = new URLSearchParams(location.hash.slice(1)).get("token") || sessionStorage.getItem("token") || "";
+// Компьютер: токен запуска в #token=…, он убирается из адреса. iPhone: постоянный токен в ?k=… остаётся в адресе,
+// чтобы «На экран Домой» сохранил значок, который открывает Mind без повторного QR-кода.
+const PHONE_KEY = new URLSearchParams(location.search).get("k") || "";
+const TOKEN = new URLSearchParams(location.hash.slice(1)).get("token") || PHONE_KEY || sessionStorage.getItem("token") || "";
+const ON_PHONE = !!PHONE_KEY;
 sessionStorage.setItem("token", TOKEN);
-history.replaceState(null, "", location.pathname);
+history.replaceState(null, "", location.pathname + location.search);
+const MOBILE = matchMedia("(max-width: 700px)");
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -117,6 +122,8 @@ function renderHealth() {
 }
 
 // ---------------------------------------------------------------- навигация
+function closeSide() { $("#app").classList.remove("side-open"); }
+
 function show(view) {
   S.view = view;
   $("#view-chat").classList.toggle("hidden", view !== "chat");
@@ -497,8 +504,15 @@ function showAgents() {
 
 // ---------------------------------------------------------------- настройки
 const SETTINGS_TABS = [
-  ["general", "Общие"], ["keys", "Модели и ключи"], ["agents", "Агенты"], ["projects", "Проекты"], ["about", "О программе"],
-];
+  ["general", "Общие"], ["keys", "Модели и ключи"], ["agents", "Агенты"], ["projects", "Проекты"], ["phone", "iPhone"], ["about", "О программе"],
+].filter(([id]) => !(ON_PHONE && id === "phone"));
+
+function qrImage(text) {
+  const qr = qrcode(0, "M");
+  qr.addData(text);
+  qr.make();
+  return qr.createDataURL(6, 2);
+}
 
 async function openSettings(tab = "general") {
   S.settings = await api("settings");
@@ -507,6 +521,7 @@ async function openSettings(tab = "general") {
   $$("[data-tab]").forEach((b) => b.onclick = () => openSettings(b.dataset.tab));
   $("#settings-title").textContent = SETTINGS_TABS.find((t) => t[0] === tab)[1];
   const st = S.settings;
+  if (tab === "phone") S.phone = await api("phone").catch((e) => ({ error: e.message, urls: [] }));
   const sw = (id, on) => `<button class="switch${on ? " on" : ""}" data-sw="${id}"></button>`;
   let html = "";
   if (tab === "general") {
@@ -540,6 +555,20 @@ async function openSettings(tab = "general") {
       st.projects.map((p, i) => `<div class="set-row"><div class="l"><b>${esc(p.name)}</b><span>${esc(p.path)}</span></div><button class="btn" data-rmp="${i}">Убрать</button></div>`).join("") +
       `<div class="set-row"><div class="l"><b>Добавить папку</b><span>Полный путь, например C:\\Users\\user\\projects\\site</span></div>
         <input type="text" id="new-proj" placeholder="Путь к папке"><button class="btn" id="add-proj">Добавить</button></div></div>`;
+  } else if (tab === "phone") {
+    const ph = S.phone;
+    html = `<div class="group">Mind на iPhone — тот же Mind, Claude и Antigravity, работают на этом компьютере</div><div class="set-card">
+      <div class="set-row"><div class="l"><b>Доступ с телефона в домашней сети</b><span>iPhone и компьютер в одной Wi-Fi сети или компьютер подключён к режиму модема iPhone. Вход только по секретной ссылке из QR-кода; в новой сети отсканируйте код заново.</span></div>
+        <button class="switch${ph.enabled ? " on" : ""}" id="phone-sw"></button></div>
+      ${ph.error ? `<div class="set-row"><div class="l"><b>Не запустилось</b><span>${esc(ph.error)}</span></div></div>` : ""}
+      ${ph.running && ph.url ? `<div class="qr-box"><div class="qr"><img alt="QR-код Mind" src="${qrImage(ph.url)}"></div>
+        <ol><li>Наведите камеру iPhone на QR-код и откройте ссылку в Safari.</li>
+        <li>Нажмите «Поделиться» → «На экран Домой» → «Добавить».</li>
+        <li>Готово: значок Mind открывает приложение, пока Mind Studio запущен на компьютере.</li>
+        <li>Windows один раз спросит про доступ к сети — нажмите «Разрешить».</li></ol></div>
+        <div class="set-row"><div class="l"><b>Ссылка</b><span><code>${esc(ph.url)}</code></span></div><button class="btn" id="phone-copy">Скопировать</button></div>
+        <div class="set-row"><div class="l"><b>Новая секретная ссылка</b><span>Если ссылка попала к чужим: старый значок на телефоне перестанет работать</span></div><button class="btn" id="phone-reset">Сменить</button></div>` : ""}
+      </div>`;
   } else {
     html = `<div class="set-card"><div class="set-row"><div class="l"><b>Mind Studio</b><span>Часть AIsktagOS. Один разговор — ваши модели, Claude и Antigravity.</span></div></div>
       <div class="set-row"><div class="l"><b>Настройки</b><span>${esc(st.config_path)}</span></div></div></div>`;
@@ -559,6 +588,12 @@ function bindSettings(tab) {
     if (!Object.keys(keys).length) return toast("Введите хотя бы один ключ");
     await save({ keys }, "Ключи сохранены"); openSettings("keys");
   };
+  const psw = $("#phone-sw"); if (psw) psw.onclick = async () => {
+    try { await api("phone", { method: "POST", body: { enabled: !S.phone.enabled } }); } catch (e) { toast("Не удалось: " + e.message); }
+    openSettings("phone");
+  };
+  const pr = $("#phone-reset"); if (pr) pr.onclick = async () => { await api("phone", { method: "POST", body: { enabled: true, reset_token: true } }); toast("Ссылка сменена — отсканируйте новый QR-код"); openSettings("phone"); };
+  const pc = $("#phone-copy"); if (pc) pc.onclick = async () => { await navigator.clipboard.writeText(S.phone.url).catch(() => {}); toast("Ссылка скопирована"); };
   const ws = $("#ws-save"); if (ws) ws.onclick = () => save({ agent_workspace: $("#ws-path").value.trim() });
   const ga = $("#go-agents"); if (ga) ga.onclick = () => { closeSettings(); showAgents(); };
   $$("[data-rmp]").forEach((b) => b.onclick = async () => { const p = S.settings.projects.filter((_, i) => i !== +b.dataset.rmp); await save({ projects: p }); openSettings("projects"); loadSide(); });
@@ -582,6 +617,10 @@ async function refreshState() {
 
 async function init() {
   applyTheme();
+  if (!TOKEN) {
+    document.body.innerHTML = `<div style="padding:40px 24px;font:16px system-ui;line-height:1.5">Откройте Mind по QR-коду: на компьютере в Mind Studio → Настройки → iPhone.</div>`;
+    return;
+  }
   try { await refreshState(); } catch (e) {
     document.body.innerHTML = `<div style="padding:40px;font:15px system-ui">Mind Studio не смог связаться со своим сервером: ${esc(e.message)}</div>`;
     return;
@@ -600,7 +639,10 @@ async function init() {
   $("#settings").onclick = (e) => { if (e.target.id === "settings") closeSettings(); };
   $("#btn-handoff").onclick = handoff;
   $("#btn-theme").onclick = () => { S.theme = S.theme === "dark" ? "light" : "dark"; applyTheme(); };
-  $("#btn-toggle-side").onclick = () => $("#app").classList.toggle("side-hidden");
+  $("#btn-toggle-side").onclick = () => $("#app").classList.toggle(MOBILE.matches ? "side-open" : "side-hidden");
+  $("#scrim").onclick = closeSide;
+  // На телефоне боковая панель — шторка: после выбора разговора, проекта или раздела она закрывается
+  $("#sidebar").addEventListener("click", (e) => { if (MOBILE.matches && e.target.closest("button, a, [data-chat]")) setTimeout(closeSide, 0); });
   $("#pick-agent").onclick = (e) => { e.stopPropagation(); agentMenu(); };
   $("#pick-mode").onclick = (e) => { e.stopPropagation(); modeMenu(); };
   $("#pick-skill").onclick = (e) => { e.stopPropagation(); skillMenu(); };

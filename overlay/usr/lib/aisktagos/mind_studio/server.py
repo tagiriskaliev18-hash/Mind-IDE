@@ -1,7 +1,12 @@
-"""HTTP-сервер Mind Studio: статический интерфейс web/ и JSON/SSE API. Только 127.0.0.1.
+"""HTTP-сервер Mind Studio: статический интерфейс web/ и JSON/SSE API.
 
 Защита: каждый запуск получает случайный токен; API принимает запросы только с заголовком X-Studio-Token
 и Host 127.0.0.1/localhost — чужая веб-страница в браузере не сможет управлять агентами.
+
+Mind на iPhone: по желанию (выключено по умолчанию) поднимается второй сервер в домашней сети (порт 47810).
+Он отдаёт тот же интерфейс для телефона и пускает в API только с постоянным «телефонным» токеном — он хранится
+в настройках, попадает в телефон через QR-код и переживает перезапуски, чтобы значок Mind на экране «Домой»
+работал всегда. Включить, выключить и сменить токен можно только с самого компьютера.
 """
 from __future__ import annotations
 
@@ -9,6 +14,7 @@ import json
 import os
 import mimetypes
 import secrets
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,6 +26,9 @@ from . import agents, antigravity, continuity, mind_agent, store
 
 WEB = Path(__file__).resolve().parent / "web"
 TOKEN = secrets.token_urlsafe(24)
+PHONE_PORT = int(os.environ.get("MIND_PHONE_PORT") or 47810)
+_PHONE: dict = {"srv": None, "error": "", "token": ""}
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 _STOPS: dict[str, threading.Event] = {}
 _INBOXES: dict[str, mind_agent.Inbox] = {}   # сообщения, написанные, пока Mind работает
 
@@ -189,8 +198,84 @@ def _run(chat: dict, req: dict, stop: threading.Event, emit) -> None:
     emit("done", {"id": chat["id"]})
 
 
+# ---------------------------------------------------------------------------
+# Mind на iPhone
+# ---------------------------------------------------------------------------
+
+def phone_token(reset: bool = False) -> str:
+    if reset or not _PHONE["token"]:
+        tok = "" if reset else str(store.settings().get("phone_token") or "")
+        if not tok:
+            tok = secrets.token_urlsafe(24)
+            store.save_settings({"phone_token": tok})
+        _PHONE["token"] = tok
+    return _PHONE["token"]
+
+
+def lan_addresses() -> list[str]:
+    """IPv4-адреса компьютера в локальной сети; первым — тот, через который идёт интернет."""
+    found: list[str] = []
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))      # пакет не отправляется, система лишь выбирает интерфейс
+            found.append(s.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            found.append(info[4][0])
+    except OSError:
+        pass
+    out: list[str] = []
+    for ip in found:
+        if ip not in out and not ip.startswith(("127.", "169.254.", "0.")):
+            out.append(ip)
+    return out
+
+
+def phone_view() -> dict:
+    srv = _PHONE["srv"]
+    urls = []
+    if srv:
+        urls = [f"http://{ip}:{srv.server_address[1]}/?k={phone_token()}" for ip in lan_addresses()]
+    return {"enabled": bool(store.settings().get("phone")), "running": bool(srv), "urls": urls,
+            "url": urls[0] if urls else "", "port": PHONE_PORT, "error": _PHONE["error"]}
+
+
+def phone_start() -> dict:
+    if not _PHONE["srv"]:
+        phone_token()
+        try:
+            srv = ThreadingHTTPServer(("0.0.0.0", PHONE_PORT), PhoneHandler)
+        except OSError as e:
+            _PHONE["error"] = f"Порт {PHONE_PORT} занят или недоступен: {e}"
+        else:
+            srv.daemon_threads = True
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            _PHONE.update(srv=srv, error="")
+    return phone_view()
+
+
+def phone_stop() -> None:
+    srv = _PHONE["srv"]
+    _PHONE.update(srv=None, error="")
+    if srv:
+        threading.Thread(target=lambda: (srv.shutdown(), srv.server_close()), daemon=True).start()
+
+
+def set_phone(enabled: bool, reset_token: bool = False) -> dict:
+    store.save_settings({"phone": bool(enabled)})
+    if reset_token:
+        phone_token(reset=True)      # старый значок на телефоне перестаёт работать
+    if enabled:
+        return phone_start()
+    phone_stop()
+    return phone_view()
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "MindStudio/1.0"
+    PHONE = False
 
     def log_message(self, *a):
         pass
@@ -256,6 +341,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(store.get_chat(parts[1]))
             if parts == ["settings"]:
                 return self._json(_settings_view())
+            if parts == ["phone"] and not self.PHONE:
+                return self._json(phone_view())
             if parts == ["antigravity", "history"]:
                 return self._json(antigravity.history())
             if len(parts) == 3 and parts[:2] == ["antigravity", "conversation"]:
@@ -292,6 +379,8 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["settings"]:
             _save_settings(req)
             return self._json(_settings_view())
+        if parts == ["phone"] and not self.PHONE:
+            return self._json(set_phone(bool(req.get("enabled")), bool(req.get("reset_token"))))
         if parts == ["antigravity", "autostart"]:
             cmd = json.loads(os.environ.get("AISKTAG_STUDIO_SELF") or '["aisktag-studio"]')
             try:
@@ -350,10 +439,23 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
 
 
+class PhoneHandler(Handler):
+    """Сервер для iPhone в домашней сети: любой Host, но API — только с телефонным токеном."""
+    PHONE = True
+
+    def _host_ok(self) -> bool:
+        return True
+
+    def _authed(self) -> bool:
+        return secrets.compare_digest(self.headers.get("X-Studio-Token", ""), phone_token())
+
+
 def start(port: int = 0) -> ThreadingHTTPServer:
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     srv.daemon_threads = True
     threading.Thread(target=srv.serve_forever, daemon=True).start()
+    if store.settings().get("phone"):
+        phone_start()
     return srv
 
 

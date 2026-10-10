@@ -380,6 +380,39 @@ pre.howto { background: var(--surface-2); padding: 12px 14px; border-radius: 10p
   .modal-nav { width: 170px; }
   .set-row input[type="password"], .set-row input[type="text"] { width: 180px; }
 }
+/* ---------- телефон (iPhone, «На экран Домой») ---------- */
+.scrim { display: none; }
+@media (max-width: 700px) {
+  .app { height: 100dvh; padding-top: env(safe-area-inset-top); }
+  .sidebar {
+    position: fixed; z-index: 35; top: 0; bottom: 0; left: 0; width: min(300px, 84vw); margin-left: 0 !important;
+    padding-top: env(safe-area-inset-top); transform: translateX(-105%); transition: transform .25s ease; box-shadow: var(--shadow-lg);
+  }
+  .app.side-open .sidebar { transform: none; }
+  .scrim { position: fixed; inset: 0; z-index: 34; background: rgba(15, 15, 22, .32); }
+  .app.side-open ~ .scrim { display: block; }
+  .nav-item kbd, .hint { display: none; }
+  .column, .column.wide { width: calc(100% - 20px); }
+  .composer-wrap { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+  .composer { padding: 10px 10px 8px 14px; border-radius: 20px; }
+  .composer-bar .left { flex-wrap: wrap; row-gap: 6px; }
+  textarea, input, select { font-size: 16px !important; }   /* iOS не увеличивает страницу при вводе */
+  .agent-cards { grid-template-columns: 1fr; }
+  .modal { place-items: stretch; }
+  .modal-card { width: 100vw; height: 100dvh; border-radius: 0; flex-direction: column; padding-top: env(safe-area-inset-top); }
+  .modal-nav { width: auto; display: flex; gap: 4px; overflow-x: auto; padding: 8px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .modal-nav .nav-item { flex: none; width: auto; margin: 0; }
+  .modal-content { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  .set-row { flex-wrap: wrap; }
+  .set-row input[type="password"], .set-row input[type="text"] { width: 100%; }
+  .toast { bottom: calc(90px + env(safe-area-inset-bottom)); max-width: calc(100vw - 32px); }
+}
+.qr-box { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; padding: 14px 16px; }
+.qr-box .qr { background: #fff; padding: 10px; border-radius: 12px; line-height: 0; }
+.qr-box .qr img { width: 180px; height: 180px; image-rendering: pixelated; }
+.qr-box ol { margin: 0; padding-left: 18px; color: var(--text-2); font-size: 13.5px; line-height: 1.7; flex: 1; min-width: 220px; }
+.qr-box code { font: 12px var(--mono); word-break: break-all; }
+
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
 /* тонкие полосы прокрутки */
